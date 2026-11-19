@@ -111,6 +111,11 @@ const InterviewSchema = new mongoose.Schema(
       version: { type: Number, default: 1 },
       title: { type: String, default: "" },
     },
+    activeQuestionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Question",
+      default: null,
+    },
     questionSnapshots: [InterviewQuestionSnapshotSchema],
     scheduledStartAt: {
       type: Date,

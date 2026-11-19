@@ -120,3 +120,53 @@ export function getRefreshMaxAgeMs() {
     : 30;
   return days * 24 * 60 * 60 * 1000;
 }
+
+/**
+ * Issue a scoped candidate interview room token.
+ *
+ * @param {{ interviewId: string, candidateEmail: string, candidateName: string, candidateUserId?: string | null }} params
+ * @returns {string}
+ */
+export function signCandidateRoomToken({
+  interviewId,
+  candidateEmail,
+  candidateName,
+  candidateUserId = null,
+}) {
+  return jwt.sign(
+    {
+      type: "candidate_room",
+      interviewId: String(interviewId),
+      candidateEmail: candidateEmail.toLowerCase().trim(),
+      candidateName: candidateName.trim(),
+      candidateUserId: candidateUserId ? String(candidateUserId) : null,
+      role: "candidate",
+    },
+    getAccessSecret(),
+    {
+      algorithm: "HS256",
+      issuer: env.JWT_ISSUER,
+      audience: env.JWT_AUDIENCE,
+      expiresIn: "8h",
+    },
+  );
+}
+
+/**
+ * Verify a candidate room token.
+ *
+ * @param {string} token
+ * @returns {jwt.JwtPayload}
+ */
+export function verifyCandidateRoomToken(token) {
+  const payload = jwt.verify(token, getAccessSecret(), {
+    algorithms: ["HS256"],
+    issuer: env.JWT_ISSUER,
+    audience: env.JWT_AUDIENCE,
+  });
+  if (payload.type !== "candidate_room") {
+    throw new Error("Invalid token type for candidate room access");
+  }
+  return payload;
+}
+

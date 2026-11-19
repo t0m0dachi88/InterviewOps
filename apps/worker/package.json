@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@platform/shared": "*",
+    "bullmq": "^6.7.8",
     "dotenv": "^16.4.7",
-    "ioredis": "^5.4.2"
+    "ioredis": "^5.4.2",
+    "mongoose": "^8.24.7"
   },
   "devDependencies": {
     "vitest": "^3.0.7"

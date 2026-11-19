@@ -351,7 +351,7 @@ export async function getInterview(organizationId, interviewId) {
   return serializeInterview(interview, { interviewersMap, invitation });
 }
 
-export async function updateInterview(organizationId, interviewId, payload, user) {
+export async function updateInterview(organizationId, interviewId, payload, _user) {
   if (!mongoose.isValidObjectId(interviewId)) {
     throw notFound();
   }
@@ -434,7 +434,7 @@ export async function rescheduleInterview(
   organizationId,
   interviewId,
   { scheduledStartAt, scheduledEndAt, durationMinutes, timezone },
-  user,
+  _user,
 ) {
   if (!mongoose.isValidObjectId(interviewId)) {
     throw notFound();
@@ -491,7 +491,7 @@ export async function rescheduleInterview(
   return getInterview(organizationId, interview._id);
 }
 
-export async function cancelInterview(organizationId, interviewId, reason, user) {
+export async function cancelInterview(organizationId, interviewId, _reason, _user) {
   if (!mongoose.isValidObjectId(interviewId)) {
     throw notFound();
   }
@@ -537,7 +537,7 @@ export async function transitionInterviewStatus(
   organizationId,
   interviewId,
   targetStatus,
-  user,
+  _user,
 ) {
   if (!mongoose.isValidObjectId(interviewId)) {
     throw notFound();
@@ -580,7 +580,7 @@ export async function assignInterviewers(
   organizationId,
   interviewId,
   interviewerIds,
-  user,
+  _user,
 ) {
   if (!mongoose.isValidObjectId(interviewId)) {
     throw notFound();
@@ -618,7 +618,7 @@ export async function removeInterviewer(
   organizationId,
   interviewId,
   targetUserId,
-  user,
+  _user,
 ) {
   if (!mongoose.isValidObjectId(interviewId)) {
     throw notFound();

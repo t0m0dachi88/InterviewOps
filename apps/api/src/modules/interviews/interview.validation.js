@@ -3,7 +3,7 @@ import {
   INTERVIEW_STATUS,
   INTERVIEW_TYPE,
 } from "@platform/shared";
-import { isNonEmptyString, validators } from "../../middleware/validate.middleware.js";
+import { isNonEmptyString } from "../../middleware/validate.middleware.js";
 
 function isValidTimezone(tz) {
   try {

@@ -162,7 +162,7 @@ describe("Question Bank API (/api/v1/organizations/:organizationId/questions)", 
         statement: "Return inorder traversal.",
       });
 
-    const q2 = await request(app)
+    const _q2 = await request(app)
       .post(`/api/v1/organizations/${org.id}/questions`)
       .set("Authorization", `Bearer ${owner.token}`)
       .send({
@@ -172,7 +172,7 @@ describe("Question Bank API (/api/v1/organizations/:organizationId/questions)", 
         statement: "Design an LRU Cache.",
       });
 
-    const q3 = await request(app)
+    const _q3 = await request(app)
       .post(`/api/v1/organizations/${org.id}/questions`)
       .set("Authorization", `Bearer ${owner.token}`)
       .send({

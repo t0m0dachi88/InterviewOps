@@ -129,6 +129,16 @@ export function validateEnv(envObj = process.env) {
     10,
   );
 
+  const LIVEKIT_URL = envObj.LIVEKIT_URL || "";
+  const LIVEKIT_API_KEY = envObj.LIVEKIT_API_KEY || "";
+  const LIVEKIT_API_SECRET = envObj.LIVEKIT_API_SECRET || "";
+
+  // Judge0 Self-Hosted Execution Server (Phase 4)
+  const JUDGE0_URL = envObj.JUDGE0_URL || "http://localhost:2358";
+  const JUDGE0_API_KEY = envObj.JUDGE0_API_KEY || "";
+  const JUDGE0_CALLBACK_URL = envObj.JUDGE0_CALLBACK_URL || "";
+
+
   if (errors.length > 0) {
     const errorMsg = `Environment configuration validation failed:\n - ${errors.join("\n - ")}`;
     throw new Error(errorMsg);
@@ -170,6 +180,13 @@ export function validateEnv(envObj = process.env) {
     EMAIL_FROM,
     SMTP_URL,
     REFRESH_REUSE_GRACE_MS,
+    LIVEKIT_URL,
+    LIVEKIT_API_KEY,
+    LIVEKIT_API_SECRET,
+    isLiveKitConfigured: Boolean(LIVEKIT_API_KEY && LIVEKIT_API_SECRET),
+    JUDGE0_URL,
+    JUDGE0_API_KEY,
+    JUDGE0_CALLBACK_URL,
     isProduction,
     isTest,
     isDevelopment,
@@ -225,6 +242,12 @@ try {
     REFRESH_REUSE_GRACE_MS: parseInt(
       process.env.REFRESH_REUSE_GRACE_MS || "15000",
       10,
+    ),
+    LIVEKIT_URL: process.env.LIVEKIT_URL || "",
+    LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY || "",
+    LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET || "",
+    isLiveKitConfigured: Boolean(
+      process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET,
     ),
     isProduction: process.env.NODE_ENV === "production",
     isTest: process.env.NODE_ENV === "test",

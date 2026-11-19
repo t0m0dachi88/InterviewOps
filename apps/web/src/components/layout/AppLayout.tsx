@@ -33,9 +33,9 @@ export const AppLayout: React.FC = () => {
               </div>
               <div className="flex flex-col">
                 <span className="text-lg font-bold tracking-tight text-white flex items-center space-x-2">
-                  <span>HirePulse</span>
+                  <span>Interview Ops</span>
                   <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                    Phase 1
+                    Platform
                   </span>
                 </span>
                 <span className="text-xs text-slate-400 font-normal">
