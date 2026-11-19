@@ -62,15 +62,22 @@ The control plane must never execute candidate source code directly.
 
 ### Execution plane
 
-Execution workers consume jobs and run code in isolated sandboxes:
+Execution workers consume jobs and run code via isolated execution backends:
 
-- Fetch the immutable submission payload and test bundle through a restricted internal interface.
-- Create a fresh execution environment.
-- Compile/run the candidate program.
-- Evaluate tests without exposing hidden inputs or expected outputs.
-- Enforce resource and time limits.
-- Return normalized results.
-- Destroy temporary resources.
+- **Asynchronous Decoupling**: Express API saves the submission record with `status: "queued"`, enqueues a job into the BullMQ `code-execution` queue over Upstash Redis with TLS, and immediately returns `202 Accepted` to the client. The API process never runs candidate code.
+- **Dedicated Execution Worker (`apps/worker`)**: A standalone Node.js process listens on the `code-execution` queue with configurable concurrency (default: 5 concurrent jobs).
+- **Execution Provider Abstraction**:
+  - `ExecutionProvider`: Pluggable abstract interface defining `execute()` and `ping()`.
+  - `Judge0ExecutionProvider`: Production provider communicating over a backend-only REST API with self-hosted Judge0 Community Edition. Base64 encodes code and inputs, configures wall-clock timeouts and memory limits, handles compilation errors, and truncates large outputs to 64 KB.
+  - `MockExecutionProvider`: Deterministic provider for CI and unit test environments with zero external dependencies.
+- **Public vs. Hidden Test Evaluation**:
+  - "Run Code" (`submissionType: "run"`): Evaluates only public test cases.
+  - "Submit Solution" (`submissionType: "submit"`): Evaluates all public test cases plus private hidden test cases.
+  - Compilation errors on test 1 immediately abort remaining test runs to save compute.
+- **Persistence & Realtime Event Propagation**:
+  - The worker updates MongoDB Atlas directly with the normalized `executionResult` and sets status to `"completed"` or `"failed"`.
+  - The worker publishes an event to the Upstash Redis pub/sub channel `submission:events`.
+  - The API's `execution-events.subscriber.js` receives the pub/sub event and broadcasts it over Socket.IO to `interview:${interviewId}` room participants (`submission:completed` or `submission:failed`), strictly masking hidden test inputs and expected outputs before candidates can observe the payload.
 
 Use a separate host/VM or isolated worker pool for execution. Do not mount the host Docker socket into the Express API container. Worker credentials must not permit broad database or organization access.
 
@@ -136,40 +143,35 @@ Avoid a single global `models/` folder that causes every module to reach into ev
 
 ## 5. Collaboration architecture
 
-### Yjs
+### Yjs & Socket.IO Collaboration Bridge
 
-Use Yjs for collaborative text state. A Yjs document is authoritative for shared editor content during the session. A compatible Yjs WebSocket provider distributes document updates and awareness (cursor/presence) information.
+In Phase 3, real-time collaboration combines Yjs CRDT document convergence with a specialized Socket.IO binary/base64 protocol:
 
-Socket.IO is suitable for application-level events such as:
+1. **Namespace & Scoping**: Each question in an interview has a dedicated collaborative document (`interviewId:questionId`). Documents are isolated across interviews and questions.
+2. **Server-Side Y.Doc Authority**: The API maintains an in-memory `Y.Doc` map managed by `collaboration.service.js`. Incoming differential updates are applied to the server document and broadcast exclusively to authorized room participants.
+3. **Durable Persistence Strategy**:
+   - Initial document state is loaded from MongoDB (`CodeDocument` collection).
+   - If no prior document exists, starter code for the active question is seeded automatically.
+   - Updates are debounced by 1.5 seconds to batch write operations, avoiding a MongoDB write on every keystroke.
+   - Binary Yjs state snapshots (`Y.encodeStateAsUpdate`) and clean text extractions are stored in MongoDB Atlas.
+4. **Client-Side Monaco Binding**: The frontend uses `y-monaco` to bind the Monaco Editor model to the shared Yjs `Text` type, providing zero-conflict collaborative typing and syntax highlighting across JavaScript, Python, and C++.
 
-- participant_joined / participant_left
-- interview_started / interview_ended
-- editor_permission_changed
-- submission_queued / submission_started / submission_completed
-- chat_message_created
-- interviewer_control_changed
+### Dual-Authentication & Room Security
 
-Do not assume Socket.IO is automatically a Yjs provider. Use a supported Yjs provider or implement and test a deliberate adapter. Persist periodic Yjs snapshots and/or append updates to durable storage so a room can recover after reconnect or process restart. Redis pub/sub alone is not durable storage.
+- **Interviewer & Team Members**: Authenticated via standard short-lived JWT access tokens and checked against active database sessions and organization role permissions (`owner`, `admin`, assigned `interviewer`).
+- **Candidates**: Authenticated via single-use candidate invitation tokens exchanged for short-lived, scoped candidate room JWTs (`type: "candidate_room"`).
+- **Socket.IO Handshake Guard**: All socket connections authenticate at handshake time. Unauthenticated or uninvited connections are rejected before room subscription.
+- **Question Sanitization**: Candidate room endpoints sanitize question snapshots, ensuring hidden unit tests and expected outputs are never delivered to candidate browsers.
 
-### Permissions
+## 6. Voice and video architecture (LiveKit)
 
-- Candidate and interviewer roles are checked server-side.
-- The interviewer may grant/revoke candidate edit access.
-- Read-only observers are a future role.
-- Room tokens are short-lived and scoped to one interview.
-- Never trust a client-supplied user ID or role.
+LiveKit provides WebRTC audio/video communication:
 
-## 6. Voice/video architecture
-
-Use LiveKit as the WebRTC SFU/media layer. The Express backend:
-
-1. Verifies the user is allowed into the interview.
-2. Creates or selects the LiveKit room.
-3. Issues a short-lived room token with least-privilege grants.
-4. Returns connection details to the client.
-5. Receives and verifies provider webhooks where required.
-
-Media should flow between browser clients and LiveKit, not through Express or Socket.IO. Screen sharing is a WebRTC track. Recording/egress is optional, off by default, and subject to consent, access control, retention, and cost policy.
+1. **Token Service (`livekit.service.js`)**: Generates cryptographically signed access tokens using `livekit-server-sdk` scoped to room `interview_${interviewId}`.
+2. **Role-Based Grants**:
+   - Interviewers receive `roomAdmin: true`, `roomJoin: true`, `canPublish: true`, `canSubscribe: true`.
+   - Candidates receive `roomJoin: true`, `canPublish: true`, `canSubscribe: true`.
+3. **Graceful Fallback**: If LiveKit credentials (`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`) are not configured in local development, the backend flags `isLiveKitConfigured: false` and the frontend gracefully displays media controls in an inactive state without breaking the interview session.
 
 ## 7. Execution architecture
 

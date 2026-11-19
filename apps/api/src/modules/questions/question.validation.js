@@ -1,7 +1,6 @@
 import {
   QUESTION_DIFFICULTY,
   QUESTION_TYPE,
-  QUESTION_STATUS,
   SUPPORTED_LANGUAGES,
 } from "@platform/shared";
 import { isNonEmptyString } from "../../middleware/validate.middleware.js";

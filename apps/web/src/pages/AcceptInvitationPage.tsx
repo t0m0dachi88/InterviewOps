@@ -59,7 +59,7 @@ export const AcceptInvitationPage: React.FC = () => {
             Team Invitation
           </h1>
           <p className="text-sm text-slate-400">
-            You've been invited to join a hiring workspace on HirePulse
+            You've been invited to join a hiring workspace on Interview Ops
           </p>
         </div>
 

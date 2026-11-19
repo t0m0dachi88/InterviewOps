@@ -52,8 +52,8 @@ describe("Frontend Application Foundation", () => {
 
   it("renders application navigation and brand title", () => {
     render(<App />);
-    expect(screen.getByText("HirePulse")).toBeInTheDocument();
-    expect(screen.getByText("Phase 1")).toBeInTheDocument();
+    expect(screen.getByText("Interview Ops")).toBeInTheDocument();
+    expect(screen.getByText("Platform")).toBeInTheDocument();
     expect(screen.getByText("Overview")).toBeInTheDocument();
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Status")).toBeInTheDocument();

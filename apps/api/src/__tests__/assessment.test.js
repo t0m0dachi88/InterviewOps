@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import request from "supertest";
 import app from "../app.js";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "../test/db.js";
-import { Assessment } from "../modules/assessments/assessment.model.js";
 
 async function createTestUser({ name, email, password = "Password123!" }) {
   const res = await request(app).post("/api/v1/auth/register").send({

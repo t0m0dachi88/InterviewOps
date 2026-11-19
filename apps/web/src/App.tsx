@@ -10,12 +10,26 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { AcceptInvitationPage } from "./pages/AcceptInvitationPage";
 import { SystemStatusPage } from "./pages/SystemStatusPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { InterviewRoomPage } from "./features/interview-room/pages/InterviewRoomPage";
+import { CandidateJoinPage } from "./pages/CandidateJoinPage";
 
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          <Route
+            path="/interviews/:interviewId"
+            element={<InterviewRoomPage />}
+          />
+          <Route
+            path="/candidate/join/:token"
+            element={<CandidateJoinPage />}
+          />
+          <Route
+            path="/interviews/join/:token"
+            element={<CandidateJoinPage />}
+          />
           <Route path="/" element={<AppLayout />}>
             <Route index element={<HomePage />} />
             <Route path="login" element={<LoginPage />} />
@@ -40,5 +54,6 @@ export const App: React.FC = () => {
     </BrowserRouter>
   );
 };
+
 
 export default App;

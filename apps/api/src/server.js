@@ -1,9 +1,16 @@
+import http from "node:http";
 import app from "./app.js";
 import { env, validateEnv } from "./config/env.js";
 import { connectDB, disconnectDB } from "./config/database.js";
 import { connectRedis, disconnectRedis } from "./config/redis.js";
+import { initRealtimeGateway } from "./modules/realtime/realtime.gateway.js";
+import {
+  initExecutionEventsSubscriber,
+  closeExecutionEventsSubscriber,
+} from "./modules/realtime/execution-events.subscriber.js";
 
 let server = null;
+let io = null;
 let isShuttingDown = false;
 
 /**
@@ -27,6 +34,17 @@ export async function gracefulShutdown(signal) {
   console.log(`\nReceived ${signal}. Initiating graceful shutdown...`);
 
   // Stop accepting new HTTP connections
+  if (io) {
+    try {
+      io.close();
+      // eslint-disable-next-line no-console
+      console.log("Socket.IO gateway closed.");
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Error closing Socket.IO gateway:", err.message);
+    }
+  }
+
   if (server) {
     await new Promise((resolve) => {
       server.close(() => {
@@ -39,6 +57,7 @@ export async function gracefulShutdown(signal) {
 
   // Close external connections
   try {
+    await closeExecutionEventsSubscriber();
     await disconnectRedis();
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -93,20 +112,30 @@ export async function startServer() {
       );
     }
 
-    // Start HTTP listener
-    server = app.listen(env.PORT, () => {
-      // eslint-disable-next-line no-console
-      console.log(
-        `API server listening on port ${env.PORT} in ${env.NODE_ENV} mode`,
-      );
-      // eslint-disable-next-line no-console
-      console.log(
-        `Health endpoint: http://localhost:${env.PORT}/api/v1/health`,
-      );
-      // eslint-disable-next-line no-console
-      console.log(
-        `Readiness endpoint: http://localhost:${env.PORT}/api/v1/health/ready`,
-      );
+    // Start HTTP listener & Socket.IO realtime gateway
+    server = http.createServer(app);
+    io = initRealtimeGateway(server);
+    app.set("io", io);
+
+    // Subscribe to background worker execution events via Redis Pub/Sub
+    await initExecutionEventsSubscriber(io);
+
+    await new Promise((resolve) => {
+      server.listen(env.PORT, () => {
+        // eslint-disable-next-line no-console
+        console.log(
+          `API server listening on port ${env.PORT} in ${env.NODE_ENV} mode`,
+        );
+        // eslint-disable-next-line no-console
+        console.log(
+          `Health endpoint: http://localhost:${env.PORT}/api/v1/health`,
+        );
+        // eslint-disable-next-line no-console
+        console.log(
+          `Readiness endpoint: http://localhost:${env.PORT}/api/v1/health/ready`,
+        );
+        resolve();
+      });
     });
 
     // Listen for system termination signals

@@ -140,6 +140,7 @@ Indexes:
     email: String
   },
   interviewerIds: [ObjectId],
+  activeQuestionId: ObjectId,  // nullable, currently active question synchronized across room
   questionSnapshots: [{
     questionId: ObjectId,
     version: Number,
@@ -172,6 +173,59 @@ Indexes:
 - `{ interviewerIds: 1, scheduledStartAt: 1 }`.
 
 Do not store a raw reusable candidate join secret. Store a hash or use a dedicated invitation collection with single-use/expiry semantics.
+
+### candidateInvitations
+
+```js
+{
+  _id: ObjectId,
+  organizationId: ObjectId,
+  interviewId: ObjectId,
+  candidateName: String,
+  candidateEmail: String,
+  externalRef: String,
+  status: "pending" | "accepted" | "declined" | "revoked" | "expired",
+  tokenHash: String,          // SHA-256 hash of single-use invitation token
+  expiresAt: Date,
+  acceptedAt: Date,
+  declinedAt: Date,
+  revokedAt: Date,
+  invitedBy: ObjectId,
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+Indexes:
+
+- Unique / Compound `{ interviewId: 1, candidateEmail: 1, status: 1 }`.
+- `{ organizationId: 1, status: 1 }`.
+- `{ tokenHash: 1 }`.
+
+### codeDocuments
+
+```js
+{
+  _id: ObjectId,
+  organizationId: ObjectId,
+  interviewId: ObjectId,
+  questionId: ObjectId,
+  language: "javascript" | "python" | "cpp",
+  yjsState: Buffer,           // Binary Yjs state update snapshot
+  text: String,               // Plain text representation for quick reads
+  version: Number,            // Incremental document version
+  lastSavedAt: Date,
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+Indexes:
+
+- Unique `{ interviewId: 1, questionId: 1 }`.
+- `{ organizationId: 1 }`.
+
+Stores durable collaborative code document state backed by debounced MongoDB persistence (1.5s flush) alongside starter code seeding.
 
 ### questions
 
@@ -219,12 +273,48 @@ Security note: never serialize the full question document to candidate endpoints
   organizationId: ObjectId,
   interviewId: ObjectId,
   questionId: ObjectId,
+  questionVersion: Number,
   candidateUserId: ObjectId, // nullable for guest candidate
+  candidateName: String,
+  candidateEmail: String,
   language: "javascript" | "python" | "cpp",
-  sourceCode: String,
+  sourceCode: String,        // Max 128 KB (131072 chars)
   documentVersion: Number,
-  idempotencyKey: String,
-  status: "queued" | "running" | "completed" | "system_error",
+  submissionType: "run" | "submit", // "run" = public tests only; "submit" = public + hidden tests
+  idempotencyKey: String,    // Optional client-provided unique key
+  status: "saved" | "queued" | "processing" | "completed" | "failed" | "cancelled",
+  sequenceNumber: Number,    // Per-interview auto-incrementing snapshot counter
+  submittedBy: {
+    id: String,
+    name: String,
+    role: "candidate" | "interviewer" | "admin" | "owner"
+  },
+  executionResult: {
+    status: "queued" | "processing" | "passed" | "failed" | "compile_error" | "runtime_error" | "timeout" | "memory_limit_exceeded" | "internal_error",
+    passedCount: Number,
+    failedCount: Number,
+    totalCount: Number,
+    durationMs: Number,
+    peakMemoryKb: Number,
+    compileOutput: String,
+    stderr: String,
+    stdout: String,
+    errorMessage: String,
+    executedAt: Date,
+    testResults: [{
+      testIndex: Number,
+      visibility: "public" | "hidden",
+      status: "passed" | "failed" | "compile_error" | "runtime_error" | "timeout" | "memory_limit_exceeded" | "internal_error",
+      passed: Boolean,
+      input: String,
+      expectedOutput: String,
+      actualOutput: String,
+      compileOutput: String,
+      stderr: String,
+      durationMs: Number,
+      memoryKb: Number
+    }]
+  },
   createdAt: Date,
   updatedAt: Date
 }
@@ -232,11 +322,13 @@ Security note: never serialize the full question document to candidate endpoints
 
 Indexes:
 
-- Unique `{ organizationId: 1, interviewId: 1, idempotencyKey: 1 }`.
+- `{ organizationId: 1, interviewId: 1, idempotencyKey: 1 }` (sparse, unique).
+- `{ interviewId: 1, questionId: 1, createdAt: -1 }`.
 - `{ interviewId: 1, createdAt: -1 }`.
-- `{ organizationId: 1, candidateUserId: 1, createdAt: -1 }`.
+- `{ interviewId: 1, status: 1 }`.
+- `{ organizationId: 1, status: 1 }`.
 
-If source code size becomes large, move immutable source snapshots to private object storage and retain a content hash/reference in MongoDB. Do not use Cloudinary for this.
+Security note: Never serialize the full `executionResult` to candidate endpoints or over websockets. Candidates receive a masked view where `input`, `expectedOutput`, `actualOutput`, `compileOutput`, and `stderr` are stripped for all hidden test cases. Interviewers and organization admins receive the full evaluation results.
 
 ### executionResults
 

@@ -475,3 +475,298 @@ export async function acceptInvitationApi(token: string): Promise<{
   });
   return res.data;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3 — Live Interview Environment Types & APIs
+// ---------------------------------------------------------------------------
+
+export interface QuestionSnapshotDto {
+  questionId: string;
+  version: number;
+  title: string;
+  statement: string;
+  constraints?: string[];
+  examples?: Array<{ input: string; output: string; explanation?: string }>;
+  allowedLanguages?: string[];
+  starterCodeByLanguage?: Record<string, string>;
+  publicTests?: Array<{ input: string; expectedOutput: string }>;
+  timeLimitMs?: number;
+  memoryLimitMb?: number;
+  order?: number;
+  timeAllocationMinutes?: number;
+}
+
+export interface ParticipantDto {
+  id: string;
+  name: string;
+  role: string;
+  isCandidate: boolean;
+  joinedAt?: string;
+  connectionCount?: number;
+}
+
+export interface InterviewRoomData {
+  interview: {
+    id: string;
+    title: string;
+    description: string;
+    interviewType: string;
+    status: string;
+    durationMinutes: number;
+    scheduledStartAt: string | null;
+    scheduledEndAt: string | null;
+    startedAt: string | null;
+    endedAt: string | null;
+    timezone: string;
+    organizationId: string;
+    organizationName: string;
+    candidate: {
+      name: string;
+      email: string;
+    };
+  };
+  participant: ParticipantDto;
+  activeQuestionId: string | null;
+  questions: QuestionSnapshotDto[];
+  participants: ParticipantDto[];
+  permissions: {
+    canEdit: boolean;
+    canNavigateQuestions: boolean;
+    canEndInterview: boolean;
+    isInterviewer: boolean;
+  };
+}
+
+export interface TestCaseResultDto {
+  testIndex: number;
+  visibility: "public" | "hidden";
+  status: string;
+  passed: boolean;
+  input?: string;
+  expectedOutput?: string;
+  actualOutput?: string;
+  compileOutput?: string;
+  stderr?: string;
+  durationMs?: number;
+  memoryKb?: number;
+}
+
+export interface ExecutionResultDto {
+  status:
+    | "queued"
+    | "running"
+    | "passed"
+    | "failed"
+    | "compile_error"
+    | "runtime_error"
+    | "time_limit_exceeded"
+    | "memory_limit_exceeded"
+    | "system_error";
+  passedCount: number;
+  failedCount: number;
+  totalCount: number;
+  durationMs: number;
+  peakMemoryKb: number;
+  compileOutput: string;
+  stderr: string;
+  stdout: string;
+  errorMessage?: string;
+  executedAt: string | null;
+  testResults: TestCaseResultDto[];
+}
+
+export interface SubmissionDto {
+  id: string;
+  organizationId: string;
+  interviewId: string;
+  questionId: string;
+  questionVersion: number;
+  candidateUserId: string | null;
+  candidateName: string;
+  candidateEmail: string;
+  language: string;
+  sourceCode: string;
+  documentVersion: number;
+  submissionType?: "run" | "submit";
+  status:
+    | "saved"
+    | "queued"
+    | "processing"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "submitted";
+  sequenceNumber: number;
+  submittedBy: {
+    id: string;
+    name: string;
+    role: string;
+  };
+  executionResult?: ExecutionResultDto | null;
+  createdAt: string;
+}
+
+export interface LiveKitTokenData {
+  token: string;
+  serverUrl: string;
+  roomName: string;
+  isConfigured: boolean;
+  notice?: string;
+}
+
+export interface CandidateInvitationDto {
+  invitation: {
+    id: string;
+    candidateName: string;
+    candidateEmail: string;
+    status: string;
+    expiresAt: string;
+    acceptedAt?: string | null;
+  };
+  interview: {
+    id: string;
+    title: string;
+    description: string;
+    interviewType: string;
+    durationMinutes: number;
+    scheduledStartAt: string | null;
+    scheduledEndAt: string | null;
+    timezone: string;
+    status: string;
+  };
+  organization: {
+    id: string;
+    name: string;
+  };
+}
+
+export async function getInterviewRoomApi(interviewId: string): Promise<InterviewRoomData> {
+  const res = await fetchApi<InterviewRoomData>(`/interviews/${interviewId}/room`);
+  return res.data;
+}
+
+export async function getActiveQuestionApi(interviewId: string): Promise<{
+  activeQuestionId: string;
+  question: QuestionSnapshotDto;
+}> {
+  const res = await fetchApi<{
+    activeQuestionId: string;
+    question: QuestionSnapshotDto;
+  }>(`/interviews/${interviewId}/active-question`);
+  return res.data;
+}
+
+export async function setActiveQuestionApi(
+  interviewId: string,
+  questionId: string,
+): Promise<{
+  activeQuestionId: string;
+  questionTitle: string;
+  switchedBy: ParticipantDto;
+}> {
+  const res = await fetchApi<{
+    activeQuestionId: string;
+    questionTitle: string;
+    switchedBy: ParticipantDto;
+  }>(`/interviews/${interviewId}/active-question`, {
+    method: "PATCH",
+    body: JSON.stringify({ questionId }),
+  });
+  return res.data;
+}
+
+export async function createSubmissionApi(
+  interviewId: string,
+  questionId: string,
+  payload: {
+    sourceCode: string;
+    language: string;
+    documentVersion?: number;
+    status?: string;
+    submissionType?: "run" | "submit";
+    idempotencyKey?: string;
+  },
+): Promise<{
+  submission: SubmissionDto;
+  message: string;
+  isDuplicate: boolean;
+}> {
+  const res = await fetchApi<{
+    submission: SubmissionDto;
+    message: string;
+    isDuplicate: boolean;
+  }>(`/interviews/${interviewId}/questions/${questionId}/submissions`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return res.data;
+}
+
+export async function getSubmissionStatusApi(
+  submissionId: string,
+): Promise<{
+  id: string;
+  status: string;
+  submissionType: string;
+  executionResult?: ExecutionResultDto | null;
+}> {
+  const res = await fetchApi<{
+    id: string;
+    status: string;
+    submissionType: string;
+    executionResult?: ExecutionResultDto | null;
+  }>(`/submissions/${submissionId}/status`);
+  return res.data;
+}
+
+export async function listSubmissionsApi(
+  interviewId: string,
+  questionId?: string,
+): Promise<{ submissions: SubmissionDto[]; count: number }> {
+  const query = questionId ? `?questionId=${encodeURIComponent(questionId)}` : "";
+  const res = await fetchApi<{ submissions: SubmissionDto[]; count: number }>(
+    `/interviews/${interviewId}/questions/${questionId || ""}/submissions${query}`,
+  );
+  return res.data;
+}
+
+export async function getSubmissionApi(
+  submissionId: string,
+): Promise<{ submission: SubmissionDto }> {
+  const res = await fetchApi<{ submission: SubmissionDto }>(`/submissions/${submissionId}`);
+  return res.data;
+}
+
+export async function getLiveKitTokenApi(
+  interviewId: string,
+): Promise<LiveKitTokenData> {
+  const res = await fetchApi<LiveKitTokenData>(`/interviews/${interviewId}/livekit/token`, {
+    method: "POST",
+  });
+  return res.data;
+}
+
+export async function getCandidateInvitationApi(
+  token: string,
+): Promise<CandidateInvitationDto> {
+  const res = await fetchApi<CandidateInvitationDto>(`/candidate-invitations/${token}`);
+  return res.data;
+}
+
+export async function acceptCandidateInvitationApi(token: string): Promise<{
+  roomToken: string;
+  interviewId: string;
+  candidateName: string;
+  candidateEmail: string;
+}> {
+  const res = await fetchApi<{
+    roomToken: string;
+    interviewId: string;
+    candidateName: string;
+    candidateEmail: string;
+  }>(`/candidate-invitations/${token}/accept`, {
+    method: "POST",
+  });
+  return res.data;
+}
+

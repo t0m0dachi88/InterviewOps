@@ -21,6 +21,9 @@ export declare const ERROR_CODES: {
   readonly CANDIDATE_INVITATION_REVOKED: "CANDIDATE_INVITATION_REVOKED";
   readonly CANDIDATE_INVITATION_ALREADY_RESOLVED: "CANDIDATE_INVITATION_ALREADY_RESOLVED";
   readonly EMAIL_MISMATCH: "EMAIL_MISMATCH";
+  readonly EXECUTION_TIMEOUT: "EXECUTION_TIMEOUT";
+  readonly EXECUTION_SERVICE_UNAVAILABLE: "EXECUTION_SERVICE_UNAVAILABLE";
+  readonly LANGUAGE_NOT_SUPPORTED: "LANGUAGE_NOT_SUPPORTED";
 };
 
 export declare const ORG_ROLES: {
@@ -79,6 +82,24 @@ export declare const EXECUTION_STATUS: {
 };
 export type ExecutionStatus =
   (typeof EXECUTION_STATUS)[keyof typeof EXECUTION_STATUS];
+
+export declare const SUBMISSION_TYPE: {
+  readonly RUN: "run";
+  readonly SUBMIT: "submit";
+};
+export type SubmissionType =
+  (typeof SUBMISSION_TYPE)[keyof typeof SUBMISSION_TYPE];
+
+export declare const SUBMISSION_LIFECYCLE: {
+  readonly SAVED: "saved";
+  readonly QUEUED: "queued";
+  readonly PROCESSING: "processing";
+  readonly COMPLETED: "completed";
+  readonly FAILED: "failed";
+  readonly CANCELLED: "cancelled";
+};
+export type SubmissionLifecycle =
+  (typeof SUBMISSION_LIFECYCLE)[keyof typeof SUBMISSION_LIFECYCLE];
 
 export declare const QUESTION_CATEGORIES: readonly {
   readonly id: string;

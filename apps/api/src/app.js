@@ -13,6 +13,11 @@ import organizationRoutes from "./modules/organizations/organization.routes.js";
 import invitationRoutes from "./modules/organizations/invitation.routes.js";
 import questionRoutes from "./modules/questions/question.routes.js";
 import assessmentRoutes from "./modules/assessments/assessment.routes.js";
+import interviewRoutes from "./modules/interviews/interview.routes.js";
+import interviewRoomRoutes from "./modules/interview-room/interview-room.routes.js";
+import candidateInvitationRoutes from "./modules/candidates/candidate-invitation.routes.js";
+import submissionRoutes from "./modules/submissions/submission.routes.js";
+import livekitRoutes from "./modules/livekit/livekit.routes.js";
 
 /**
  * Initialize Express application.
@@ -66,6 +71,15 @@ export function createApp() {
     "/api/v1/organizations/:organizationId/assessments",
     assessmentRoutes,
   );
+  app.use(
+    "/api/v1/organizations/:organizationId/interviews",
+    interviewRoutes,
+  );
+  app.use("/api/v1/interviews/:interviewId/livekit", livekitRoutes);
+  app.use("/api/v1/interviews/:interviewId", interviewRoomRoutes);
+  app.use("/api/v1", submissionRoutes);
+  app.use("/api/v1", candidateInvitationRoutes);
+
 
   // 404 handler
   app.use(notFoundMiddleware);

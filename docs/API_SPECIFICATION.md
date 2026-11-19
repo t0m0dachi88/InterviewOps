@@ -63,21 +63,28 @@ Do not return stack traces, secrets, hidden test data, internal container paths,
 | DELETE | `/organizations/:organizationId/members/:userId` | Remove member                      |
 | POST   | `/invitations/:token/accept`                     | Accept invitation                  |
 
-## 4. Interviews
+## 4. Interviews, Rooms, and Candidate Invitations
 
-| Method | Endpoint                                    | Purpose                                                       |
-| ------ | ------------------------------------------- | ------------------------------------------------------------- |
-| POST   | `/organizations/:organizationId/interviews` | Create interview                                              |
-| GET    | `/organizations/:organizationId/interviews` | List interviews                                               |
-| GET    | `/interviews/:interviewId`                  | Interview detail, role-filtered                               |
-| PATCH  | `/interviews/:interviewId`                  | Update scheduled interview                                    |
-| POST   | `/interviews/:interviewId/invitations`      | Invite candidate                                              |
-| POST   | `/interviews/:interviewId/cancel`           | Cancel interview                                              |
-| POST   | `/interviews/:interviewId/start`            | Start interview (authorized interviewer)                      |
-| POST   | `/interviews/:interviewId/end`              | End interview (authorized interviewer)                        |
-| POST   | `/interviews/:interviewId/join-token`       | Exchange invitation/session credential for scoped room access |
+| Method | Endpoint                                         | Purpose                                                       |
+| ------ | ------------------------------------------------ | ------------------------------------------------------------- |
+| POST   | `/organizations/:organizationId/interviews`      | Create interview                                              |
+| GET    | `/organizations/:organizationId/interviews`      | List interviews                                               |
+| GET    | `/interviews/:interviewId`                       | Interview detail, role-filtered                               |
+| PATCH  | `/interviews/:interviewId`                       | Update scheduled interview                                    |
+| POST   | `/interviews/:interviewId/invitations`           | Invite candidate (issues token & candidate invitation)        |
+| GET    | `/candidate-invitations/:token`                  | Verify public invitation token without exposing secrets       |
+| POST   | `/candidate-invitations/:token/accept`           | Accept invitation & obtain candidate room JWT                 |
+| POST   | `/interviews/:interviewId/join-token`            | Exchange invitation secret for scoped candidate room JWT      |
+| GET    | `/interviews/:interviewId/room`                  | Get interview room state with candidate-safe question snapshots|
+| POST   | `/interviews/:interviewId/room/join`             | Join interview room                                           |
+| POST   | `/interviews/:interviewId/room/leave`            | Leave interview room                                          |
+| GET    | `/interviews/:interviewId/active-question`       | Get currently active question snapshot                        |
+| PATCH  | `/interviews/:interviewId/active-question`       | Switch active question (interviewer/admin only)               |
+| POST   | `/interviews/:interviewId/cancel`                | Cancel interview                                              |
+| POST   | `/interviews/:interviewId/start`                 | Start interview (authorized interviewer)                      |
+| POST   | `/interviews/:interviewId/end`                   | End interview (authorized interviewer)                        |
 
-Candidate invitation links should contain an opaque, expiring secret. Store only a hash server-side and exchange it for a short-lived session credential. Do not put permanent access tokens in URLs.
+Candidate invitation links contain an opaque, expiring secret. The server stores only its SHA-256 hash and exchanges it for a short-lived `candidate_room` JWT upon acceptance or join-token request. Permanent access credentials are never exposed in URLs.
 
 ## 5. Questions
 
@@ -90,62 +97,122 @@ Candidate invitation links should contain an opaque, expiring secret. Store only
 | POST   | `/interviews/:interviewId/questions`             | Attach question snapshot                |
 | DELETE | `/interviews/:interviewId/questions/:questionId` | Detach question before interview starts |
 
-Candidate-facing question DTOs must exclude hidden test cases and expected outputs. Execution workers obtain hidden test data through a private internal path.
+Candidate-facing question DTOs strictly exclude hidden test cases and expected outputs. Execution workers obtain hidden test data through an internal path in Phase 4.
 
-## 6. Submissions and execution
+## 6. Submissions (Phase 3 — No Code Execution)
 
-| Method | Endpoint                                                     | Purpose                                      |
-| ------ | ------------------------------------------------------------ | -------------------------------------------- |
-| POST   | `/interviews/:interviewId/questions/:questionId/submissions` | Create submission and enqueue execution      |
-| GET    | `/submissions/:submissionId`                                 | Get role-filtered submission status/result   |
-| GET    | `/interviews/:interviewId/submissions`                       | List submissions for authorized interviewers |
-| GET    | `/submissions/:submissionId/result`                          | Get permitted execution result               |
-| GET    | `/interviews/:interviewId/submissions/:submissionId/source`  | Get source snapshot if authorized            |
+| Method | Endpoint                                                     | Purpose                                                        |
+| ------ | ------------------------------------------------------------ | -------------------------------------------------------------- |
+| POST   | `/interviews/:interviewId/questions/:questionId/submissions` | Create draft (`saved`) or immutable submission (`submitted`)   |
+| GET    | `/interviews/:interviewId/questions/:questionId/submissions` | List submission history for question (candidate-isolated)     |
+| GET    | `/submissions/:submissionId`                                 | Get immutable submission snapshot details                     |
 
 ### Submission request
 
 ```http
 POST /api/v1/interviews/{interviewId}/questions/{questionId}/submissions
-Authorization: Bearer <access-token>
-Idempotency-Key: <unique-client-generated-key>
+Authorization: Bearer <access-token-or-candidate-room-token>
+Idempotency-Key: <optional-unique-client-generated-key>
 Content-Type: application/json
 ```
 
 ```json
 {
   "language": "python",
-  "sourceCode": "print('hello')",
-  "documentVersion": 42
+  "sourceCode": "def solution():\n    return 42",
+  "documentVersion": 3,
+  "submissionType": "run", // "run" (evaluates public tests) or "submit" (evaluates public + hidden tests)
+  "status": "saved" // optional: pass "saved" to save a draft snapshot without execution
 }
 ```
 
 ### Submission response
 
-Return `202 Accepted` because execution is asynchronous.
-
 ```json
 {
   "success": true,
   "data": {
-    "submissionId": "ObjectId",
-    "status": "queued"
+    "submission": {
+      "id": "673f8a9...",
+      "interviewId": "673f8a0...",
+      "questionId": "673f8a1...",
+      "questionVersion": 1,
+      "language": "python",
+      "sourceCode": "def solution():\n    return 42",
+      "documentVersion": 3,
+      "submissionType": "run",
+      "status": "queued",
+      "sequenceNumber": 1,
+      "submittedBy": {
+        "id": "cand_...",
+        "name": "Jane Candidate",
+        "role": "candidate"
+      },
+      "executionResult": {
+        "status": "queued",
+        "passedCount": 0,
+        "failedCount": 0,
+        "totalCount": 2,
+        "durationMs": 0,
+        "peakMemoryKb": 0,
+        "compileOutput": "",
+        "stderr": "",
+        "stdout": "",
+        "testResults": []
+      },
+      "createdAt": "2026-11-20T00:00:00.000Z"
+    },
+    "message": "Code run enqueued for execution."
   }
 }
 ```
 
-Execution outcomes:
+### Submission status polling endpoint
 
-- `queued`
-- `running`
-- `passed`
-- `failed`
-- `compile_error`
-- `runtime_error`
-- `time_limit_exceeded`
-- `memory_limit_exceeded`
-- `system_error`
+```http
+GET /api/v1/submissions/{submissionId}/status
+Authorization: Bearer <access-token-or-candidate-room-token>
+```
 
-Candidate responses may include public test outcomes and sanitized compiler/runtime output. They must not include hidden test inputs, expected outputs, or internal harness details.
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "673f8a9...",
+    "status": "completed",
+    "submissionType": "run",
+    "executionResult": {
+      "status": "passed",
+      "passedCount": 2,
+      "failedCount": 0,
+      "totalCount": 2,
+      "durationMs": 52,
+      "peakMemoryKb": 14200,
+      "compileOutput": "",
+      "stderr": "",
+      "stdout": "program output",
+      "errorMessage": "",
+      "executedAt": "2026-11-20T00:00:02.000Z",
+      "testResults": [
+        {
+          "testIndex": 1,
+          "visibility": "public",
+          "status": "passed",
+          "passed": true,
+          "input": "2 3",
+          "expectedOutput": "5",
+          "actualOutput": "5",
+          "durationMs": 24,
+          "memoryKb": 13900
+        }
+      ]
+    }
+  }
+}
+```
+
+Security note: For candidate requests, hidden test cases omit `input`, `expectedOutput`, `actualOutput`, `compileOutput`, and `stderr` entirely. For interviewers and organization administrators, all fields are populated. Rate limiting: 30 submissions per minute per user/interview. Max source size: 128 KB. Output buffers truncated to 64 KB. Wall-clock execution timeout enforced at 2.0s.
 
 ## 7. Evaluations
 
@@ -158,47 +225,60 @@ Candidate responses may include public test outcomes and sanitized compiler/runt
 
 ## 8. Media / LiveKit
 
-| Method | Endpoint                                     | Purpose                          |
-| ------ | -------------------------------------------- | -------------------------------- |
-| POST   | `/interviews/:interviewId/media-token`       | Issue scoped LiveKit token       |
-| POST   | `/webhooks/livekit`                          | Receive verified LiveKit webhook |
-| POST   | `/interviews/:interviewId/recording-consent` | Record participant consent state |
+| Method | Endpoint                                     | Purpose                                                       |
+| ------ | -------------------------------------------- | ------------------------------------------------------------- |
+| POST   | `/interviews/:interviewId/livekit/token`     | Issue scoped LiveKit token with role-based room grants        |
+| POST   | `/webhooks/livekit`                          | Receive verified LiveKit webhook (deferred to Stage C)        |
+| POST   | `/interviews/:interviewId/recording-consent` | Record participant consent state                              |
 
-The backend must authorize the participant before issuing a LiveKit token. Token grants should be restricted to the relevant room and participant identity. Verify webhook signatures using the provider SDK.
+The backend authorizes the participant (team member or candidate) before issuing a LiveKit token.
+- Room name: `interview_${interviewId}`.
+- Interviewer grants: `roomAdmin: true`, `roomJoin: true`, `canPublish: true`, `canSubscribe: true`.
+- Candidate grants: `roomJoin: true`, `canPublish: true`, `canSubscribe: true`.
+- Graceful dev fallback: If `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are not configured, returns `isLiveKitConfigured: false` without failing.
 
-## 9. Realtime events
+## 9. Realtime events & Yjs Collaboration
 
-Use Socket.IO namespaces/rooms with server-side authorization. Event names and payloads are versioned and validated.
+Socket.IO is mounted at the root HTTP server.
 
-### Client -> server
+### Authentication & Handshake
 
-| Event                       | Purpose                        | Key payload                                 |
-| --------------------------- | ------------------------------ | ------------------------------------------- |
-| `room:join`                 | Join authorized interview room | `{ interviewId }`                           |
-| `room:leave`                | Leave room                     | `{ interviewId }`                           |
-| `chat:send`                 | Send room message              | `{ interviewId, message, clientMessageId }` |
-| `editor:permission-request` | Request permission change      | `{ interviewId, canCandidateEdit }`         |
-| `interview:control`         | Authorized interviewer action  | `{ interviewId, action }`                   |
-| `presence:update`           | Update activity state          | `{ interviewId, state }`                    |
+Client connects passing `auth: { token: "<access_token_or_candidate_room_token>", interviewId: "<id>" }`.
+- Verified against active user session in DB for team members.
+- Verified against candidate room JWT signature for candidates.
+- Unauthenticated or unauthorized connection requests are immediately rejected during handshake.
 
-### Server -> client
+### Room & Presence Events
 
-| Event                       | Purpose                  | Key payload                                 |
-| --------------------------- | ------------------------ | ------------------------------------------- |
-| `room:participant-joined`   | Participant joined       | `{ userId, displayName, role }`             |
-| `room:participant-left`     | Participant left         | `{ userId }`                                |
-| `room:presence`             | Presence snapshot/update | `{ participants }`                          |
-| `chat:message`              | New chat message         | `{ messageId, sender, message, createdAt }` |
-| `editor:permission-changed` | Editor access changed    | `{ canCandidateEdit, changedBy }`           |
-| `submission:queued`         | Submission accepted      | `{ submissionId, status }`                  |
-| `submission:started`        | Worker started           | `{ submissionId, status }`                  |
-| `submission:completed`      | Execution finished       | `{ submissionId, status, resultSummary }`   |
-| `interview:started`         | Interview started        | `{ interviewId, startedAt }`                |
-| `interview:ended`           | Interview ended          | `{ interviewId, endedAt }`                  |
+| Event (Client -> Server) | Purpose                        | Payload                                         |
+| ------------------------ | ------------------------------ | ----------------------------------------------- |
+| `interview:join`         | Join room and announce presence| `{ interviewId }`                               |
+| `interview:leave`        | Leave room                     | `{ interviewId }`                               |
 
-### Yjs document events
+| Event (Server -> Client)       | Purpose                           | Payload                                                 |
+| ------------------------------ | --------------------------------- | ------------------------------------------------------- |
+| `interview:participant_joined` | Broadcast on participant join     | `{ participant: { id, name, role }, participants }`     |
+| `interview:participant_left`   | Broadcast on participant leave    | `{ participant: { id, name, role }, participants }`     |
+| `interview:room_state`         | Presence snapshot on room join    | `{ participants: [...] }`                               |
+| `interview:active_question_changed` | Synchronized question switch | `{ activeQuestionId, changedBy }`                      |
+| `submission:saved`             | Draft code saved notification     | `{ submissionId, sequenceNumber, language, timestamp }` |
+| `submission:queued`            | Execution job queued              | `{ submissionId, sequenceNumber, language, submissionType, timestamp }` |
+| `submission:completed`         | Execution finished successfully   | `{ submissionId, executionResult (sanitized for candidates), timestamp }` |
+| `submission:failed`            | Execution failed / error          | `{ submissionId, error, timestamp }`                    |
 
-Use a compatible Yjs WebSocket provider for document updates and awareness. Do not send full editor contents as ordinary Socket.IO events on every keystroke. Persist snapshots/updates through the collaboration service and authorize document access at connection time and on reconnect.
+### Yjs Collaboration Protocol
+
+Real-time code editing synchronizes through a scoped binary/base64 Yjs channel per question:
+
+| Event                         | Direction       | Payload                                                    |
+| ----------------------------- | --------------- | ---------------------------------------------------------- |
+| `yjs:join`                    | Client -> Server| `{ interviewId, questionId }`                              |
+| `yjs:sync`                    | Server -> Client| `{ questionId, update: "<base64_encoded_yjs_state>" }`     |
+| `yjs:update`                  | Bidirectional   | `{ interviewId, questionId, update: "<base64_update>" }`   |
+| `yjs:awareness`               | Bidirectional   | `{ interviewId, questionId, awareness: "<base64_state>" }` |
+| `yjs:reset`                   | Client -> Server| `{ interviewId, questionId }` (interviewer/admin only)     |
+
+Server loads durable state from `CodeDocument` collection in MongoDB, seeds default starter code if first visit, applies incoming updates to an in-memory `Y.Doc`, broadcasts differential updates to room peers, and persists document updates to MongoDB using a 1.5s debounce.
 
 ## 10. Security and validation requirements
 

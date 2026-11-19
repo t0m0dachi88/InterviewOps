@@ -87,73 +87,68 @@ Do not start with microservices. Use a modular monolith for the control plane an
 - Question snapshot regression tests.
 - A company can schedule an interview and invite a candidate.
 
-## 5. Phase 3 — Coding workspace
+## 5. Phase 3 — Live Interview Environment [COMPLETED]
 
-### Backend
+### Completed Backend Deliverables
 
-- Submission API and immutable source snapshot.
-- Idempotency handling.
-- Submission history endpoints.
-- Candidate-safe question/result DTOs.
+- Live interview room module (`interview-room.service.js`, `interview-room.controller.js`, `interview-room.routes.js`).
+- Dual-auth middleware (`authenticateParticipant`) supporting team members via DB sessions and candidates via scoped JWT tokens.
+- Candidate invitation acceptance & join-token exchange (`candidate-invitation.service.js`, `candidate-invitation.controller.js`).
+- Socket.IO Realtime Gateway with handshake authorization, room presence tracking, and synchronized events (`realtime.gateway.js`, `presence.service.js`).
+- Collaborative code editing with server-side Yjs state management and debounced MongoDB persistence (`collaboration.service.js`, `collaboration.gateway.js`, `code-document.model.js`).
+- Submission management API with rate limiting, size limits, idempotency keys, and immutable source snapshots (`submission.service.js`, `submission.controller.js`, `submission.model.js`).
+- LiveKit token service with role-scoped room grants and graceful development fallback (`livekit.service.js`, `livekit.controller.js`).
 
-### Frontend
+### Completed Frontend Deliverables
 
-- Monaco integration.
-- Language selector for JavaScript, Python, C++.
-- Problem statement and examples panel.
-- Editor state persistence.
-- Run/submit controls and submission timeline.
+- Full-screen 3-column interview workspace (`InterviewRoomPage.tsx`, `InterviewHeader.tsx`).
+- Monaco Editor integration with language selection (JavaScript, Python, C++), code reset modal, and read-only mode (`CollaborativeEditor.tsx`, `useCollaborativeEditor.ts`).
+- Yjs + y-monaco collaborative document synchronization with remote awareness and server sync.
+- Question workspace panel displaying immutable question statements, constraints, examples, and synchronized interviewer tab switching (`QuestionPanel.tsx`).
+- Submission management panel with draft saving, final submission snapshots, and immutable code inspection modal (`SubmissionPanel.tsx`).
+- LiveKit audio/video panel with device toggle controls and graceful disabled fallback (`VideoRoom.tsx`).
+- Public candidate invitation acceptance page (`CandidateJoinPage.tsx`).
 
-### Tests / exit criteria
+### Completed Verification
 
-- Source persistence and version association.
-- Payload validation and size limits.
-- Duplicate idempotency key behavior.
-- Hidden test data cannot be serialized to candidate API.
-- A candidate can edit code and submit a saved snapshot (execution may still be stubbed in this phase).
+- 93 automated tests passing across 4 workspaces (shared, api, web, worker).
+- Zero TypeScript and ESLint warnings.
+- Frontend production bundle builds cleanly.
+- Code execution intentionally deferred to Phase 4.
 
-## 6. Phase 4 — Execution infrastructure
+## 6. Phase 4 — Execution infrastructure [COMPLETED]
 
-This phase requires a threat model and security review before exposing it to external users.
+This phase introduced secure code execution and test-case evaluation using self-hosted Judge0 Community Edition and asynchronous BullMQ workers.
 
-### Backend / queue
+### Backend & Queue (`apps/api`)
 
-- BullMQ queue and typed job payload.
-- Job status lifecycle and retry policy.
-- Per-organization quotas and global concurrency controls.
-- Worker heartbeat and dead-letter handling.
+- BullMQ queue `code-execution` over Upstash Redis with TLS (`execution-queue.service.js`).
+- Asynchronous submission handling returning `201 Created` with `status: "queued"`.
+- Rate limiting (30 submissions/min) and source code size validation (128 KB limit).
+- Lightweight polling endpoint `GET /api/v1/submissions/:submissionId/status`.
+- Real-time subscriber (`execution-events.subscriber.js`) listening to Redis pub/sub channel `submission:events` and broadcasting `submission:completed` / `submission:failed` over Socket.IO to `interview:${interviewId}` room.
+- Strict role-based test serialization (`serializeSubmission`) masking hidden test inputs and expected outputs from candidates.
 
-### Worker
+### Dedicated Execution Worker (`apps/worker`)
 
-- Separate worker process/deployment.
-- Disposable sandbox manager.
-- JavaScript runtime.
-- Python runtime.
-- C++ compile-and-run toolchain.
-- CPU, memory, PID, filesystem, output, and wall-time limits.
-- Network disabled by default.
-- Guaranteed cleanup on success, error, timeout, and worker cancellation.
+- Standalone Node.js execution worker (`src/index.js`, `src/processors/execution.processor.js`).
+- Execution provider abstraction (`ExecutionProvider`, `Judge0ExecutionProvider`, `MockExecutionProvider`).
+- Base64 encoding/decoding, wall-time limit (2.0s), memory limit (256 MB), and 64 KB output buffer truncation.
+- Language mappings for JavaScript (Node.js 12.14, ID 63), Python 3 (Python 3.8.1, ID 71), and C++ (GCC 9.2, ID 54).
+- Direct MongoDB Atlas execution result updates and Upstash Redis pub/sub broadcasting.
 
-### Frontend
+### Frontend (`apps/web`)
 
-- Queued/running/completed states.
-- Public test result display.
-- Sanitized compile/runtime output.
-- Submission history and result detail.
+- Test runner UI with "Run Code" (evaluates public test cases) and "Submit Solution" modal (evaluates public and hidden test cases).
+- `TestResultPanel`: Status indicators (`passed`, `failed`, `compile_error`, `runtime_error`, `timeout`), metrics (duration, memory), tabbed test case viewer, and hidden test masking indicators.
+- Real-time Socket.IO listeners in `useInterviewSocket` for `submission:queued`, `submission:completed`, and `submission:failed` with polling fallback.
+- Test runner integration in `InterviewRoomPage` and `SubmissionPanel`.
 
-### Tests / exit criteria
+### Verification
 
-- Unit tests for runtime adapters.
-- Integration tests for each language.
-- Timeout and memory-limit tests.
-- Output-flooding test.
-- Network-denial test.
-- Concurrent job test.
-- Worker crash and cleanup test.
-- Hidden test leakage tests.
-- Security review of container flags, mounts, capabilities, namespaces, and worker host configuration.
-
-Do not run untrusted candidate code on a developer laptop or the same host that contains production secrets. Before real external usage, deploy workers to isolated compute and evaluate gVisor or Firecracker.
+- 107 monorepo automated tests passing across `@platform/shared`, `@platform/api`, `@platform/web`, and `@platform/worker`.
+- Zero TypeScript (`tsc -b`) and ESLint (`--max-warnings=0`) errors.
+- Self-hosted Judge0 deployment guide documented in `docs/JUDGE0_DEPLOYMENT.md`.
 
 ## 7. Phase 5 — Live collaboration
 

@@ -1,147 +1,127 @@
-# Project Status: AI-Powered Technical Hiring Platform
+# Project Status: Interview Ops — Technical Hiring Platform
 
-## Current Phase: Phase 1 — Authentication & Organizations
+## Current Phase: Phase 4 — Secure Code Execution & Test-Case Evaluation
 
 **Status**: Completed  
-**Infrastructure Model**: 100% Managed Cloud (MongoDB Atlas + Upstash Redis)  
-**Last Updated**: 2026-10-26
+**Infrastructure Model**: 100% Managed Cloud (MongoDB Atlas + Upstash Redis) + Self-Hosted Isolated Execution Engine (Judge0 Community Edition)  
+**Last Updated**: 2026-11-20  
 
 ---
 
 ## 1. Executive Summary
 
-Phase 1 has been completed in strict accordance with the project documentation (`PROJECT_REQUIREMENTS.md`, `SYSTEM_ARCHITECTURE.md`, `DATABASE_SCHEMA.md`, `API_SPECIFICATION.md`, and `IMPLEMENTATION_PLAN.md`):
+Phase 4 has been completed in strict accordance with the project requirements, architectural boundaries, and application security model:
 
-- **100% Managed Cloud Infrastructure**: MongoDB Atlas is configured for persistent data, and Upstash Redis over TLS is configured for queueing and caching. No local database or Redis server is required. Application startup, test suites, and CI operate independently without requiring live external credentials through dependency injection and `mongodb-memory-server`.
-- **Argon2id Authentication & Refresh Token Rotation**: Implemented Argon2id password hashing, short-lived JWT access tokens (`15m`), and HMAC-SHA256 hashed refresh tokens stored server-side. Secure transport is enforced using HttpOnly SameSite cookies (`/api/v1/auth`), double-submit CSRF tokens, and family-wide session revocation upon refresh token reuse detection.
-- **Multi-Tenant Organization Architecture**: Automatic organization creation with unique slug generation and collision resolution, automatic creator-to-owner assignment, and strict tenant isolation where unauthorized cross-tenant requests return 404 to prevent resource enumeration.
-- **Role-Based Access Control (RBAC)**: Enforces an explicit permission matrix across `owner`, `admin`, and `interviewer` roles. Business rules prevent self-elevation, forbid interviewer privilege modifications, prevent admins from altering owners, and prohibit removing or demoting the last organization owner.
-- **Organization Invitation Lifecycle**: Full teammate invitation flow with expiring tokens, duplicate prevention, token acceptance, and automatic membership provisioning.
-- **Modern SaaS Frontend**: Responsive React 18 + TypeScript web application with `AuthContext`, session restoration, `ProtectedRoute` redirection, registration with real-time password criteria checklist, login, active organization switching, teammate invitation management, member role updates, ownership transfer, and workspace settings.
+- **Platform Rebranded to Interview Ops**: The user-facing and internal branding has been updated to **Interview Ops** across all UI headers, navigation bars, invitation acceptance flows, and automated test suites.
+- **Asynchronous Execution Architecture**: The control plane (Express API) never executes candidate code directly. Submissions are enqueued into a dedicated BullMQ `code-execution` queue over Upstash Redis with TLS. The API returns an immediate `201 Created` with `status: "queued"`, maintaining responsiveness under heavy traffic.
+- **Dedicated Execution Worker Plane (`apps/worker`)**: A standalone worker process consumes execution jobs, runs test cases sequentially against an execution provider, updates MongoDB Atlas directly with normalized execution results, and publishes completion events to Upstash Redis.
+- **Provider Abstraction (`ExecutionProvider`)**:
+  - `Judge0ExecutionProvider`: Connects to self-hosted Judge0 Community Edition via private REST API with Base64 encoding/decoding, wall-clock timeout protection (2.0s default), memory limit enforcement (256 MB default), output truncation (64 KB buffer cap), and automatic abort on compilation errors.
+  - `MockExecutionProvider`: High-speed, deterministic mock provider for CI and offline unit testing with zero external dependencies.
+- **Public vs. Hidden Test Evaluation & Candidate Privacy**:
+  - "Run Code" (`submissionType: "run"`): Evaluates public test cases only.
+  - "Submit Solution" (`submissionType: "submit"`): Evaluates all public and private hidden test cases.
+  - **Zero Leakage Security**: Hidden test inputs, expected outputs, actual program outputs, compiler diagnostics, and internal stack traces are strictly stripped from candidate API responses and WebSocket broadcast payloads. Only authorized interviewers and organization admins have access to full test evaluation details.
+- **Real-Time Execution Updates**: Upstash Redis pub/sub (`submission:events`) delivers execution updates back to the API layer, which broadcasts `submission:completed` and `submission:failed` events over Socket.IO to the room `interview:${interviewId}` with a polling fallback via `GET /api/v1/submissions/:submissionId/status`.
+- **Integrated Test Runner UI**: The interview workspace features a tabbed test result runner (`TestResultPanel`), interactive test case switcher, detailed metrics (duration ms, memory KB), output inspection, and submission history review.
 
 ---
 
 ## 2. Completed Deliverables
 
-### A. Authentication & Session Security (`apps/api`)
+### A. Core Foundation & Auth (Phases 0 & 1)
+- Argon2id password hashing, JWT access tokens (15m), and HMAC-SHA256 hashed refresh tokens with family-wide reuse revocation.
+- Double-submit CSRF cookie/header validation and Origin checking.
+- Multi-tenant organization scoping with RBAC (`owner`, `admin`, `interviewer`).
+- Organization teammate invitation lifecycle.
 
-- **Password Hashing (`src/modules/auth/password.service.js`)**: Argon2id hashing with secure parameters (`memoryCost: 65536`, `timeCost: 3`, `parallelism: 1`).
-- **Token Management (`src/modules/auth/token.service.js`)**:
-  - Short-lived HS256 access tokens with `userId` and `sessionId` claims, verified against `JWT_ISSUER` and `JWT_AUDIENCE`.
-  - Refresh tokens delivered exclusively via HttpOnly cookies (`/api/v1/auth`), stored server-side as HMAC-SHA256 hashes in `sessions`.
-  - Automatic token family revocation upon reuse detection outside grace period (`REFRESH_REUSE_GRACE_MS`).
-- **CSRF & Security Middleware (`src/middleware/csrf.middleware.js`, `cookie.service.js`)**: Double-submit CSRF cookie/header validation and Origin checking for mutating cookie endpoints.
-- **Authentication Middleware (`src/middleware/authenticate.middleware.js`)**: Validates Bearer access tokens, confirming user and session are active and unrevoked.
-- **Endpoints (`src/modules/auth/auth.routes.js`, `auth.controller.js`, `auth.service.js`)**:
-  - `POST /api/v1/auth/register`: Create user account and issue authenticated session.
-  - `POST /api/v1/auth/login`: Authenticate email/password.
-  - `POST /api/v1/auth/refresh`: Rotate refresh token and issue new access token.
-  - `POST /api/v1/auth/logout`: Revoke current session and clear auth cookies.
-  - `POST /api/v1/auth/logout-all`: Revoke all sessions for current user.
-  - `GET /api/v1/auth/me`: Retrieve current profile and CSRF token.
+### B. Assessment & Interview Management (Phase 2)
+- Question bank with multi-language starter code, test suites (public and hidden), and versioning.
+- Assessment templates grouping questions.
+- Interview lifecycle management (`draft`, `scheduled`, `waiting`, `live`, `completed`, `cancelled`) with immutable question snapshots.
+- Candidate invitation creation with cryptographically secure token hashing.
 
-### B. Organizations & Memberships (`apps/api`)
+### C. Live Interview Environment (Phase 3)
+- Live interview room module with presence tracking and synchronized events.
+- Collaborative Monaco code editor backed by Yjs with debounced MongoDB Atlas persistence.
+- LiveKit voice and video service with role-scoped room tokens and graceful local fallback.
+- Candidate invitation acceptance flow and scoped room JWT authentication.
 
-- **Models (`organization.model.js`, `membership.model.js`, `invitation.model.js`)**: Schema validation, compound indexes without duplicate index warnings, and UTC timestamps.
-- **Organization Scoping & Permissions (`src/modules/organizations/permissions.js`, `src/middleware/authorize-organization.middleware.js`)**:
-  - `requireOrganization(permission)` middleware enforcing tenant membership.
-  - Permission matrix covering `organization:view`, `organization:update`, `member:view`, `member:invite`, `member:change_role`, `member:remove`, and `ownership:transfer`.
-  - Invariant enforcement: Last-owner demotion/removal protection, ownership transfer operation, self-elevation guards.
-- **Endpoints (`src/modules/organizations/organization.routes.js`, `invitation.routes.js`)**:
-  - `POST /api/v1/organizations`: Create organization with slug generation.
-  - `GET /api/v1/organizations`: List organizations for current user.
-  - `GET /api/v1/organizations/:organizationId`: Organization details.
-  - `PATCH /api/v1/organizations/:organizationId`: Update settings (interview duration, recording policy, allowed languages).
-  - `GET /api/v1/organizations/:organizationId/members`: List members with user profiles.
-  - `PATCH /api/v1/organizations/:organizationId/members/:membershipId`: Update member role (`admin` <-> `interviewer`).
-  - `DELETE /api/v1/organizations/:organizationId/members/:membershipId`: Remove member.
-  - `POST /api/v1/organizations/:organizationId/transfer-ownership`: Transfer owner role to another member.
-  - `POST /api/v1/organizations/:organizationId/invitations`: Issue invitation to colleague.
-  - `GET /api/v1/organizations/:organizationId/invitations`: List pending invitations.
-  - `DELETE /api/v1/organizations/:organizationId/invitations/:invitationId`: Revoke pending invitation.
-  - `POST /api/v1/invitations/:token/accept`: Accept organization invitation.
+### D. Secure Code Execution & Test-Case Evaluation (Phase 4)
 
-### C. Frontend Architecture (`apps/web`)
+#### 1. Execution Provider Abstraction (`apps/worker/src/providers/`)
+- `execution-provider.interface.js`: Pluggable abstract class contract (`execute`, `ping`).
+- `judge0.provider.js`: Production-ready Judge0 Community Edition provider with Base64 encoding/decoding, 64 KB stdout/stderr buffer capping, 2.0s wall-clock timeout, 256 MB memory limit, and compilation error short-circuiting.
+- `mock.provider.js`: Deterministic, offline execution provider for CI and unit test execution.
+- Configurable via `EXECUTION_PROVIDER` (`judge0` or `mock`).
 
-- **API Client (`src/lib/api-client.ts`)**: Strongly typed wrapper managing Bearer tokens, CSRF headers, error envelopes, and complete auth/organization/invitation API methods.
-- **Authentication Context (`src/context/AuthContext.tsx`)**: Reactive user session, active organization state, persistent org selection via `localStorage`, and silent background token refresh.
-- **Protected Routes (`src/components/auth/ProtectedRoute.tsx`)**: Guards private routes and smoothly redirects unauthenticated visitors to `/login`.
-- **Views**:
-  - `LoginPage.tsx`: SaaS sign-in card with validation and error alerts.
-  - `RegisterPage.tsx`: Account creation with live password criteria indicators.
-  - `DashboardPage.tsx`:
-    - Organization switcher dropdown and "New Org" modal.
-    - Zero-org welcome onboarding state.
-    - Active members table with role badges, role change controls, removal actions, and ownership transfer.
-    - Invite teammate modal with role selection and development debug links.
-    - Pending invitations table with revocation actions.
-    - Workspace settings editor (duration, recording policy, allowed languages).
-  - `AcceptInvitationPage.tsx`: Invitation token acceptance flow.
-  - `AppLayout.tsx`: Header displaying live auth state, active organization pill, user name, and sign-out action.
+#### 2. Queue & Background Worker Architecture
+- **BullMQ Producer (`apps/api/src/modules/queue/execution-queue.service.js`)**: Enqueues jobs to `code-execution` queue over Upstash Redis with exponential backoff and idempotency.
+- **Execution Processor (`apps/worker/src/processors/execution.processor.js`)**: Fetches job data, executes test cases sequentially, saves normalized `executionResult` in MongoDB Atlas, and publishes `submission:events` to Redis.
+- **Worker Process (`apps/worker/src/index.js`)**: Standalone consumer with graceful shutdown handling (SIGINT/SIGTERM).
 
-### D. Standalone Worker Service (`apps/worker`)
+#### 3. Real-Time Execution Events & Status API
+- **Redis Subscriber (`apps/api/src/modules/realtime/execution-events.subscriber.js`)**: Subscribes to Redis `submission:events` and broadcasts sanitized events over Socket.IO to room `interview:${interviewId}` (`submission:completed`, `submission:failed`).
+- **Status Endpoint (`GET /api/v1/submissions/:submissionId/status`)**: Lightweight polling endpoint for execution status and test results with strict candidate isolation.
+- **Serializer (`apps/api/src/modules/submissions/submission.service.js`)**: Strict role-based test serialization ensuring candidate payloads never contain hidden test inputs, expected outputs, or stderr.
 
-- **Long-Running Process (`src/index.js`)**: Standalone background service with heartbeat and `SIGTERM`/`SIGINT` graceful shutdown.
-- **Queue Consumer Boundary (`src/config/queue.js`, `src/config/redis.js`)**: Defines BullMQ Worker consumer configuration (`concurrency`, Upstash TLS connection).
-- **Test Suite (`src/__tests__/worker.test.js`)**: Verifies queue names and BullMQ worker options.
+#### 4. Frontend Test Runner UI (`apps/web`)
+- **`TestResultPanel.tsx`**: Displays test status badges (`passed`, `failed`, `compile_error`, `runtime_error`, `timeout`), peak memory, total execution duration, tabbed test cases, and hidden test masking notice.
+- **`SubmissionPanel.tsx`**: Adds "Test Results" tab, "Run Code" button, and "Submit Solution" modal with confirmation prompt.
+- **`useInterviewSocket.ts`**: Listens for `submission:queued`, `submission:completed`, and `submission:failed` with automatic fallback to polling `GET /submissions/:id/status`.
+- **`InterviewRoomPage.tsx`**: Ties editor state to execution triggers, managing loading indicators and active result tabs.
 
-### E. Shared Package (`packages/shared`)
-
-- Standard error codes (`ERROR_CODES`).
-- Organization roles (`ORG_ROLES`: `owner`, `admin`, `interviewer`).
-- Invitation statuses (`INVITATION_STATUS`: `pending`, `accepted`, `revoked`, `expired`).
-- User statuses (`USER_STATUS`: `active`, `disabled`).
-- Supported execution languages (`SUPPORTED_LANGUAGES`: `javascript`, `python`, `cpp`).
-- Standard API response envelope helpers (`createSuccessEnvelope`, `createErrorEnvelope`).
+#### 5. Infrastructure & Deployment Documentation
+- **`docs/JUDGE0_DEPLOYMENT.md`**: Complete production guide for deploying self-hosted Judge0 Community Edition via Docker Compose on an isolated VPS, including cgroups v2 configuration, `judge0.conf` security flags, UFW firewall allowlisting, and systemd service management.
 
 ---
 
 ## 3. Verification & Test Summary
 
-| Package / Workspace | Test Suite             | Tests                                                                | Status  |
-| ------------------- | ---------------------- | -------------------------------------------------------------------- | ------- |
-| `@platform/shared`  | `envelope.test.js`     | Envelope creation, error codes, constants                            | Passing |
-| `@platform/api`     | `env.test.js`          | Upstash Redis & Atlas validation scenarios                           | Passing |
-| `@platform/api`     | `redis.test.js`        | BullMQ requirements, TLS, dependency injection                       | Passing |
-| `@platform/api`     | `app.test.js`          | Express init, Request ID tracing, 404 handler                        | Passing |
-| `@platform/api`     | `health.test.js`       | Liveness probe (`/api/v1/health`)                                    | Passing |
-| `@platform/api`     | `readiness.test.js`    | Readiness probe with healthy vs degraded DB/Redis                    | Passing |
-| `@platform/api`     | `error.test.js`        | Centralized AppError handling & 500 fallback                         | Passing |
-| `@platform/api`     | `permissions.test.js`  | Owner/admin/interviewer matrix, role changes, member removal guards  | Passing |
-| `@platform/api`     | `auth.test.js`         | Register, login, refresh rotation, reuse revocation, CSRF, /auth/me  | Passing |
-| `@platform/api`     | `organization.test.js` | Slug handling, tenant isolation, role changes, transfer, invitations | Passing |
-| `@platform/web`     | `App.test.tsx`         | Layout, brand title, and page rendering                              | Passing |
-| `@platform/web`     | `AuthFlow.test.tsx`    | Login, register, protected route redirect, org onboarding            | Passing |
-| `@platform/worker`  | `worker.test.js`       | BullMQ worker configuration, queue names, concurrency boundary       | Passing |
+| Package / Workspace | Test Suite                   | Focus Areas                                                                 | Status  |
+| ------------------- | ---------------------------- | --------------------------------------------------------------------------- | ------- |
+| `@platform/shared`  | `envelope.test.js`           | Envelope creation, error codes, constants, submission lifecycle             | Passing |
+| `@platform/api`     | `env.test.js`                | Upstash Redis & Atlas validation scenarios                                  | Passing |
+| `@platform/api`     | `redis.test.js`              | BullMQ requirements, TLS, dependency injection                              | Passing |
+| `@platform/api`     | `app.test.js`                | Express init, Request ID tracing, 404 handler                               | Passing |
+| `@platform/api`     | `health.test.js`             | Liveness probe (`/api/v1/health`)                                           | Passing |
+| `@platform/api`     | `readiness.test.js`          | Readiness probe with healthy vs degraded DB/Redis                           | Passing |
+| `@platform/api`     | `error.test.js`              | Centralized AppError handling & 500 fallback                                | Passing |
+| `@platform/api`     | `permissions.test.js`        | Owner/admin/interviewer matrix, role changes, member removal guards         | Passing |
+| `@platform/api`     | `auth.test.js`               | Register, login, refresh rotation, reuse revocation, CSRF, /auth/me         | Passing |
+| `@platform/api`     | `organization.test.js`       | Slug handling, tenant isolation, role changes, transfer, invitations        | Passing |
+| `@platform/api`     | `question.test.js`           | Question CRUD, multi-language starter code, test suites, versioning         | Passing |
+| `@platform/api`     | `assessment.test.js`         | Assessment templates, question ordering, version tracking                  | Passing |
+| `@platform/api`     | `interview-room.test.js`     | Room auth, lifecycle guards, question sanitization, presence, join token    | Passing |
+| `@platform/api`     | `collaboration.test.js`      | Yjs document creation, starter code seeding, debounced Mongo persistence    | Passing |
+| `@platform/api`     | `submissions.test.js`        | Rate limiting, size limits, idempotency, Run/Submit flows, hidden test mask | Passing |
+| `@platform/api`     | `livekit.test.js`            | LiveKit room tokens, role grants, graceful dev fallback                     | Passing |
+| `@platform/web`     | `App.test.tsx`               | Layout, brand title, and page rendering                                     | Passing |
+| `@platform/web`     | `AuthFlow.test.tsx`          | Login, register, protected route redirect, org onboarding                   | Passing |
+| `@platform/web`     | `InterviewRoom.test.tsx`     | Header, Monaco editor, question panel, test runner controls, submission tabs| Passing |
+| `@platform/worker`  | `judge0.provider.test.js`    | Base64 handling, status mapping, language IDs, timeout, buffer capping      | Passing |
+| `@platform/worker`  | `execution.processor.test.js`| BullMQ execution processor, sequential test runner, Redis pub/sub           | Passing |
+| `@platform/worker`  | `worker.test.js`             | BullMQ worker configuration, queue names, concurrency boundary              | Passing |
 
-- **Total Test Count**: 68 tests passing across 4 workspaces (0 failing).
-- **Linter Status**: ESLint and TypeScript (`tsc -b`) passing with 0 errors and 0 warnings.
-- **Code Style**: 100% formatted with Prettier.
-- **Frontend Production Build**: Vite build completed successfully without warnings.
+- **Total Test Count**: 107 tests passing across 22 test files in 4 workspaces (0 failing).
+- **Linter Status**: ESLint (`--max-warnings=0`) and TypeScript (`tsc -b`) passing with 0 errors and 0 warnings.
+- **Frontend Production Build**: Vite build completed cleanly with 0 errors.
 
 ---
 
 ## 4. Current Limitations & Deferred Items
 
-The following items are intentionally deferred or scoped to future phases per the architecture specifications:
+The following items are intentionally deferred to future phases:
 
-- **Email Provider Transport**: The email service (`src/modules/email/email.service.js`) currently operates as an abstraction stub. Real SMTP/provider delivery (e.g., Resend, AWS SES) is deferred until provider credentials are configured; in development and testing environments, raw invitation tokens are exposed via `debugToken` in API responses.
-- **Email Verification Route**: The database schema supports `emailVerifiedAt` and the environment validator supports `REQUIRE_EMAIL_VERIFICATION`, but the dedicated public token exchange route (`POST /api/v1/auth/verify-email`) has not yet been built.
-- **Password Recovery & Profile Assets**: Self-service password reset flows (`/auth/forgot-password`, `/auth/reset-password`) and user avatar uploads via Cloudinary are not yet implemented.
-- **Worker Execution Sandbox**: The BullMQ queue consumer structure and connection parameters are established in `apps/worker`, but isolated code execution runtimes (Docker/nsjail sandboxes, compiler toolchains, execution timeouts) are deferred to Phase 4.
-- **Candidate & Interview Workspaces**: Candidate join credentials, interview sessions, question versioning, code submissions, and LiveKit audio/video media tokens are not yet implemented and belong to Phase 2 through Phase 4.
+- **AI-Assisted Interviewer (Stage C / Phase 5+)**: LLM-driven hints, follow-up question generation, and real-time evaluation assistance.
+- **Post-Interview Rubrics & Human Scorecards (Phase 5)**: Structured evaluation forms and interviewer scorecard submission.
+- **LiveKit Cloud Credentials**: In development environments without LiveKit cloud credentials, video calling gracefully degrades with media controls disabled.
 
 ---
 
-## 5. Next Steps: Phase 2 — Interview Management
+## 5. Next Steps: Phase 5 — Evaluations & Human Rubrics
 
-Upon user approval to begin Phase 2:
-
-1. **Interview Schema & Data Access**: Implement the Mongoose `Interview` model supporting lifecycle statuses (`draft`, `scheduled`, `waiting`, `live`, `completed`, `cancelled`) and organization scoping.
-2. **Interview CRUD Endpoints**: Build `POST`, `GET`, `PATCH`, and `POST /cancel` routes under `/api/v1/organizations/:organizationId/interviews`.
-3. **Candidate Invitations**: Generate single-use, expiring candidate join secrets stored as hashes server-side, with link generation and candidate join validation.
-4. **Interviewer Assignment**: Authorize and bind specific interviewer team members to scheduled interviews.
-5. **Question Bank & Snapshotting**:
-   - Implement `Question` model with multi-language starter code and test cases.
-   - Attach immutable question snapshots to interviews at schedule time.
-6. **Frontend Interview Management**: Build interview dashboard, interview creation modal, candidate invitation workflow, and candidate waiting room view.
+Upon user instruction to proceed to Phase 5:
+1. Implement interviewer rubric scorecards (`GET /interviews/:id/rubric`, `POST /interviews/:id/evaluation`).
+2. Implement composite scoring criteria and post-interview outcome states.
+3. Candidate summary reports and exportable assessment archives.

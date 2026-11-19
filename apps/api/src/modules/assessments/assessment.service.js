@@ -185,7 +185,7 @@ export async function getAssessment(organizationId, assessmentId) {
   return serializeAssessment(assessment, questionsMap);
 }
 
-export async function updateAssessment(organizationId, assessmentId, payload, user) {
+export async function updateAssessment(organizationId, assessmentId, payload, _user) {
   if (!mongoose.isValidObjectId(assessmentId)) {
     throw notFound();
   }

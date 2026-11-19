@@ -24,6 +24,9 @@ export const ERROR_CODES = Object.freeze({
   CANDIDATE_INVITATION_REVOKED: "CANDIDATE_INVITATION_REVOKED",
   CANDIDATE_INVITATION_ALREADY_RESOLVED: "CANDIDATE_INVITATION_ALREADY_RESOLVED",
   EMAIL_MISMATCH: "EMAIL_MISMATCH",
+  EXECUTION_TIMEOUT: "EXECUTION_TIMEOUT",
+  EXECUTION_SERVICE_UNAVAILABLE: "EXECUTION_SERVICE_UNAVAILABLE",
+  LANGUAGE_NOT_SUPPORTED: "LANGUAGE_NOT_SUPPORTED",
 });
 
 /**
@@ -134,4 +137,24 @@ export const EXECUTION_STATUS = Object.freeze({
   TIME_LIMIT_EXCEEDED: "time_limit_exceeded",
   MEMORY_LIMIT_EXCEEDED: "memory_limit_exceeded",
   SYSTEM_ERROR: "system_error",
+});
+
+/**
+ * Submission types.
+ */
+export const SUBMISSION_TYPE = Object.freeze({
+  RUN: "run",       // Runs against public test cases only (candidate scratchpad/debug)
+  SUBMIT: "submit", // Formal submission running against both public and hidden test cases
+});
+
+/**
+ * Full submission lifecycle statuses.
+ */
+export const SUBMISSION_LIFECYCLE = Object.freeze({
+  SAVED: "saved",           // Draft code snapshot (no execution)
+  QUEUED: "queued",         // Enqueued in BullMQ for execution
+  PROCESSING: "processing", // Worker actively running tests via Judge0
+  COMPLETED: "completed",   // Execution finished successfully (all tests evaluated)
+  FAILED: "failed",         // Execution job failed due to system/infrastructure error
+  CANCELLED: "cancelled",   // Job cancelled
 });
