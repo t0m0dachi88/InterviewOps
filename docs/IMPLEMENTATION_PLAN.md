@@ -271,3 +271,36 @@ For every phase:
 - Update architecture and status documents.
 - Demo the working vertical slice.
 - Review security and privacy impact before moving on.
+
+---
+
+## Phase 5 — Human evaluation, rubrics and reports (current development scope)
+
+Earlier phase numbers in this plan describe the original roadmap. The implemented
+project now labels completed foundation/authentication, assessment/interview,
+live collaboration and code execution as Phases 0–4. The evaluation work below
+is **Phase 5**, not the old "Phase 7 — Evaluation and audit" roadmap item.
+
+1. **Slice 1, implemented in source; tests not yet run:** Organization-scoped
+   reusable rubric model with append-only embedded versions, role permissions,
+   strict validation, version conflict detection and archive API. See
+   `API_SPECIFICATION.md` section 7 and `DATABASE_SCHEMA.md`.
+2. **Slice 2, implemented in frontend source; frontend tests/build not yet run:** organization-level rubric management UI at `/rubrics`, using the existing organization context and Slice 1 API contract. Backend integration remains unverified until Slice 1 runtime acceptance.
+3. Slice 3 (not started): evaluator-owned scorecards; freeze one rubric version
+   when the **first** scorecard is created; subsequent interview scorecards
+   reference that snapshot; validation and draft/submit lifecycle.
+4. Slice 4 (not started): scorecard UI.
+5. Slice 5 (not started): assignment and multi-interviewer privacy.
+6. Slice 6 (not started): final human review and immutable decision history.
+7. Slice 7 (not started): allowlisted private, internal and candidate reports.
+8. Slice 8 (not started): authorization-checked server-side PDF export.
+9. Slice 9 (not started): regression, security verification, infra checks and docs.
+
+Scorecard ownership must not be overridden silently by owners/admins;
+reopening/resubmission must produce auditable revisions; stale concurrent
+edits must fail rather than overwrite history. Scoring must never treat missing
+scores as zero, nor translate numerical summaries into automated decisions.
+
+Dependency installation and live integration verification are required before
+any feature can be declared fully verified or production-ready. Email delivery
+is still a placeholder; submission aggregate result serialization needs review.

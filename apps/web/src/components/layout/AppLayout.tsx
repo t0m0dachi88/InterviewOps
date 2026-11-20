@@ -9,6 +9,7 @@ import {
   ExternalLink,
   LogOut,
   Building2,
+  BookOpenCheck,
 } from "lucide-react";
 
 export const AppLayout: React.FC = () => {
@@ -74,6 +75,22 @@ export const AppLayout: React.FC = () => {
               <LayoutDashboard className="h-4 w-4" />
               <span className="hidden sm:inline">Dashboard</span>
             </NavLink>
+
+            {user && activeOrg && (
+              <NavLink
+                to="/rubrics"
+                className={({ isActive }) =>
+                  `flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-slate-800 text-indigo-400"
+                      : "text-slate-300 hover:text-white hover:bg-slate-800/60"
+                  }`
+                }
+              >
+                <BookOpenCheck className="h-4 w-4" />
+                <span className="hidden sm:inline">Rubrics</span>
+              </NavLink>
+            )}
 
             <NavLink
               to="/system-status"

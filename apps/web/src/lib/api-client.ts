@@ -60,6 +60,73 @@ export interface OrganizationInvitationItem {
   createdAt: string;
 }
 
+export interface RubricCriterionDto {
+  key: string;
+  label: string;
+  description: string;
+  required: boolean;
+  weight: number;
+}
+
+export interface RubricScaleDto {
+  min: number;
+  max: number;
+  labels: Record<string, string>;
+}
+
+export interface RubricDto {
+  id: string;
+  organizationId: string;
+  status: "active" | "archived";
+  currentVersion: number;
+  activeVersion: number;
+  name: string;
+  description: string;
+  jobRole: string;
+  assessmentId: string | null;
+  scale: RubricScaleDto;
+  criteria: RubricCriterionDto[];
+  changeSummary: string;
+  versionCreatedBy: string;
+  versionCreatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RubricVersionMetadataDto {
+  version: number;
+  name: string;
+  changeSummary: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface RubricVersionsDto {
+  rubricId: string;
+  currentVersion: number;
+  versions: RubricVersionMetadataDto[];
+}
+
+export interface RubricListPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface RubricContentInput {
+  name: string;
+  description: string;
+  jobRole: string;
+  assessmentId?: string | null;
+  scale: RubricScaleDto;
+  criteria: RubricCriterionDto[];
+  changeSummary: string;
+}
+
 export interface HealthLivenessData {
   status: string;
   service: string;
@@ -362,6 +429,82 @@ export async function updateOrganizationApi(
     },
   );
   return res.data.organization;
+}
+
+// Phase 5 — Organization rubric management. Paths and payloads mirror the
+// Slice 1 API contract in docs/API_SPECIFICATION.md and rubric.routes.js.
+export async function listRubricsApi(
+  organizationId: string,
+  params: { status?: "active" | "archived" | "all"; page?: number; limit?: number } = {},
+): Promise<{ rubrics: RubricDto[]; pagination: RubricListPagination }> {
+  const query = new URLSearchParams({
+    status: params.status || "active",
+    page: String(params.page || 1),
+    limit: String(params.limit || 20),
+  });
+  const res = await fetchApi<{ rubrics: RubricDto[] }>(
+    `/organizations/${encodeURIComponent(organizationId)}/rubrics?${query.toString()}`,
+  );
+  return {
+    rubrics: res.data.rubrics,
+    pagination: res.meta.pagination as RubricListPagination,
+  };
+}
+
+export async function createRubricApi(
+  organizationId: string,
+  payload: RubricContentInput,
+): Promise<RubricDto> {
+  const res = await fetchApi<{ rubric: RubricDto }>(
+    `/organizations/${encodeURIComponent(organizationId)}/rubrics`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+  return res.data.rubric;
+}
+
+export async function getRubricApi(
+  organizationId: string,
+  rubricId: string,
+  version?: number,
+): Promise<RubricDto> {
+  const query = version ? `?version=${encodeURIComponent(String(version))}` : "";
+  const res = await fetchApi<{ rubric: RubricDto }>(
+    `/organizations/${encodeURIComponent(organizationId)}/rubrics/${encodeURIComponent(rubricId)}${query}`,
+  );
+  return res.data.rubric;
+}
+
+export async function getRubricVersionsApi(
+  organizationId: string,
+  rubricId: string,
+): Promise<RubricVersionsDto> {
+  const res = await fetchApi<RubricVersionsDto>(
+    `/organizations/${encodeURIComponent(organizationId)}/rubrics/${encodeURIComponent(rubricId)}/versions`,
+  );
+  return res.data;
+}
+
+export async function updateRubricApi(
+  organizationId: string,
+  rubricId: string,
+  payload: RubricContentInput & { expectedVersion: number },
+): Promise<RubricDto> {
+  const res = await fetchApi<{ rubric: RubricDto }>(
+    `/organizations/${encodeURIComponent(organizationId)}/rubrics/${encodeURIComponent(rubricId)}`,
+    { method: "PATCH", body: JSON.stringify(payload) },
+  );
+  return res.data.rubric;
+}
+
+export async function archiveRubricApi(
+  organizationId: string,
+  rubricId: string,
+): Promise<RubricDto> {
+  const res = await fetchApi<{ rubric: RubricDto }>(
+    `/organizations/${encodeURIComponent(organizationId)}/rubrics/${encodeURIComponent(rubricId)}/archive`,
+    { method: "POST" },
+  );
+  return res.data.rubric;
 }
 
 // Member API

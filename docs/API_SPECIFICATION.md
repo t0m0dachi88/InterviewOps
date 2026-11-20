@@ -214,14 +214,50 @@ Response:
 
 Security note: For candidate requests, hidden test cases omit `input`, `expectedOutput`, `actualOutput`, `compileOutput`, and `stderr` entirely. For interviewers and organization administrators, all fields are populated. Rate limiting: 30 submissions per minute per user/interview. Max source size: 128 KB. Output buffers truncated to 64 KB. Wall-clock execution timeout enforced at 2.0s.
 
-## 7. Evaluations
+## 7. Rubric management — Phase 5 Slice 1 (implemented)
 
-| Method | Endpoint                                     | Purpose                                     |
-| ------ | -------------------------------------------- | ------------------------------------------- |
-| GET    | `/interviews/:interviewId/rubric`            | Get rubric template                         |
-| PUT    | `/interviews/:interviewId/evaluation`        | Save/update interviewer draft               |
-| POST   | `/interviews/:interviewId/evaluation/submit` | Submit final human evaluation               |
-| GET    | `/interviews/:interviewId/evaluations`       | List evaluations for authorized hiring team |
+All routes start with `/api/v1/organizations/:organizationId` and require
+an authenticated active member of the organization. Owner/admin can manage;
+interviewers can view rubrics. Unauthorized organization IDs return 404.
+
+| Method | Route | Access | Behavior |
+| --- | --- | --- | --- |
+| POST | `/rubrics` | owner/admin | Create version 1; 201 |
+| GET | `/rubrics?status=active&page=1&limit=20` | member | List latest versions; status active/archived/all |
+| GET | `/rubrics/:rubricId?version=1` | member | Get specific immutable version or current |
+| GET | `/rubrics/:rubricId/versions` | member | List version metadata |
+| PATCH | `/rubrics/:rubricId` | owner/admin | Full replacement version, requires `expectedVersion` |
+| POST | `/rubrics/:rubricId/versions` | owner/admin | Alias for full replacement new version |
+| POST | `/rubrics/:rubricId/archive` | owner/admin | Archive; prevents future versions |
+
+Create/full replacement body (strict allowlist):
+
+```json
+{
+  "name": "Software Engineering",
+  "description": "Technical evaluation",
+  "jobRole": "Software Engineer",
+  "assessmentId": null,
+  "scale": { "min": 1, "max": 5, "labels": { "1": "Poor", "5": "Excellent" } },
+  "criteria": [
+    { "key": "problem_solving", "label": "Problem Solving", "description": "", "required": true, "weight": 2 },
+    { "key": "communication", "label": "Communication", "required": false, "weight": 0 }
+  ],
+  "changeSummary": "Initial rubric"
+}
+```
+
+The `scale` defaults to 1–5 if omitted. On PATCH or POST `/versions`, pass
+**all** rubric fields and integer `expectedVersion` equal to current version.
+Stale versions and archived edits return HTTP 409. Zero weights are accepted
+but **at least one criterion must have a positive weight**. Existing assessments
+must belong to the same organization. Responses use standard success/error
+envelopes and pagination metadata. Unrecognized body fields are rejected.
+
+**Future evaluation endpoints** (not implemented yet): per-interviewer scorecards,
+review/finalization, and candidate-safe/internal report generation. Earlier
+`/interviews/:id/evaluation` draft endpoints were aspirational and must not be
+mistaken for working APIs.
 
 ## 8. Media / LiveKit
 

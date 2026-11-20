@@ -1,8 +1,8 @@
 # Project Status: Interview Ops — Technical Hiring Platform
 
-## Current Phase: Phase 4 — Secure Code Execution & Test-Case Evaluation
+## Current Phase: Phase 5 — Human Evaluation, Rubrics & Reporting (Slice 1 verification pending; Slice 2 frontend implemented in source)
 
-**Status**: Completed  
+**Status**: Phases 0–4 were previously reported complete; Slice 1 backend source and Slice 2 rubric-management frontend are present. Slice 1 runtime verification and Slice 2 frontend verification remain pending.  
 **Infrastructure Model**: 100% Managed Cloud (MongoDB Atlas + Upstash Redis) + Self-Hosted Isolated Execution Engine (Judge0 Community Edition)  
 **Last Updated**: 2026-11-20  
 
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Phase 4 has been completed in strict accordance with the project requirements, architectural boundaries, and application security model:
+The existing project documentation reports Phase 4 completed in accordance with the project requirements, architectural boundaries, and application security model:
 
 - **Platform Rebranded to Interview Ops**: The user-facing and internal branding has been updated to **Interview Ops** across all UI headers, navigation bars, invitation acceptance flows, and automated test suites.
 - **Asynchronous Execution Architecture**: The control plane (Express API) never executes candidate code directly. Submissions are enqueued into a dedicated BullMQ `code-execution` queue over Upstash Redis with TLS. The API returns an immediate `201 Created` with `status: "queued"`, maintaining responsiveness under heavy traffic.
@@ -78,6 +78,8 @@ Phase 4 has been completed in strict accordance with the project requirements, a
 
 ## 3. Verification & Test Summary
 
+The passing statuses below are historical project documentation, not a fresh test run in the current development environment. The latest Slice 1 verification attempt could not execute Vitest because dependencies were unavailable. Slice 2 frontend tests, TypeScript checks and the production build must be run separately before those frontend deliverables are verified.
+
 | Package / Workspace | Test Suite                   | Focus Areas                                                                 | Status  |
 | ------------------- | ---------------------------- | --------------------------------------------------------------------------- | ------- |
 | `@platform/shared`  | `envelope.test.js`           | Envelope creation, error codes, constants, submission lifecycle             | Passing |
@@ -119,9 +121,29 @@ The following items are intentionally deferred to future phases:
 
 ---
 
-## 5. Next Steps: Phase 5 — Evaluations & Human Rubrics
+## 5. Next Steps: Phase 5 — Human Evaluation, Rubrics & Reporting
 
-Upon user instruction to proceed to Phase 5:
-1. Implement interviewer rubric scorecards (`GET /interviews/:id/rubric`, `POST /interviews/:id/evaluation`).
-2. Implement composite scoring criteria and post-interview outcome states.
-3. Candidate summary reports and exportable assessment archives.
+Proceed only through the user-approved vertical slices. The organization-level rubric management frontend is Slice 2. Scorecards, evaluator ownership, snapshot instantiation, review workflows and reports remain future slices and are not implemented by this UI.
+
+---
+
+## Phase 5 Slice 1 — Rubric persistence and API (2026-11-20)
+
+Implemented in this repository revision: `EvaluationRubric` Mongoose model with embedded version history, organization-scoped CRUD-style endpoints, owner/admin manage permissions, interviewer read permission, create/archive endpoints, and atomic expected-version updates. `apps/api/src/__tests__/rubrics.test.js` contains API tests for validation, tenant isolation, role enforcement, version history and archiving.
+
+**Verification:** JavaScript syntax checks can run locally. Full Vitest integration tests have **not** run successfully in this environment because dependency installation failed (`ENOTCACHED` offline and npm install failure online). The historical count of 107 tests is not a current verified result. Do not claim production readiness.
+
+**Phase 5 scope remaining:** rubric UI; interview rubric assignment; scorecards, evaluator ownership, immutable snapshot instantiation, audit logging, evaluation review, report/PDF generation; privacy review; live-service integration tests. Email delivery remains a placeholder. Candidate submission aggregate outputs need a dedicated security review.
+
+
+## Phase 5 Slice 2 — Organization rubric management frontend (2026-11-20)
+
+**Frontend implementation:** The authenticated `/rubrics` page is implemented in source and is scoped to the active organization. It uses the existing API client, JWT/CSRF request handling, organization context, ProtectedRoute and existing dark Tailwind design system. Owner/admin users receive rubric management controls; interviewers receive read-only controls. The page supports list filtering and pagination, create, full-replacement version updates with `expectedVersion`, historical version inspection, stale-version conflict reload, and confirmed archiving.
+
+**Frontend tests:** A RubricsPage test suite has been added for list/loading/empty/error states, create validation and submission, editing, version history/read-only behavior, archive confirmation, interviewer UI permissions, and HTTP 409 handling. These tests have not yet been executed in this environment.
+
+**TypeScript/build status:** Not verified; frontend dependencies are not installed in the current environment. Run the `@platform/web` test and build scripts in an environment with the existing lockfile dependencies installed.
+
+**Backend integration:** Not verified. The UI targets the existing Slice 1 routes and payloads documented in `docs/API_SPECIFICATION.md` and implemented under `apps/api/src/modules/rubrics`. Slice 1 runtime acceptance remains pending; this frontend implementation does not imply backend integration or end-to-end verification.
+
+**Phase 5 scope remaining:** scorecard database/API and snapshot creation (Slice 3), scorecard UI (Slice 4), multi-interviewer workflows (Slice 5), final review (Slice 6), internal/candidate reports (Slice 7), PDF export (Slice 8), and security/regression/integration verification (Slice 9). No Slice 3 work is included here.

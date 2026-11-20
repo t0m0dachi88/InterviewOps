@@ -18,6 +18,7 @@ import interviewRoomRoutes from "./modules/interview-room/interview-room.routes.
 import candidateInvitationRoutes from "./modules/candidates/candidate-invitation.routes.js";
 import submissionRoutes from "./modules/submissions/submission.routes.js";
 import livekitRoutes from "./modules/livekit/livekit.routes.js";
+import rubricRoutes from "./modules/rubrics/rubric.routes.js";
 
 /**
  * Initialize Express application.
@@ -67,6 +68,7 @@ export function createApp() {
   app.use("/api/v1/organizations", organizationRoutes);
   app.use("/api/v1/invitations", invitationRoutes);
   app.use("/api/v1/organizations/:organizationId/questions", questionRoutes);
+  app.use("/api/v1/organizations/:organizationId/rubrics", rubricRoutes);
   app.use(
     "/api/v1/organizations/:organizationId/assessments",
     assessmentRoutes,

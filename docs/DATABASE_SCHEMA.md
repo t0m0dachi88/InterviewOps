@@ -364,7 +364,53 @@ Indexes:
 
 Never include hidden test input, expected output, or private harness details in results exposed to candidates.
 
-### evaluations
+### evaluationRubrics — Phase 5 Slice 1 (implemented)
+
+`apps/api/src/modules/rubrics/rubric.model.js` defines `EvaluationRubric`:
+
+```js
+{
+  _id: ObjectId,
+  organizationId: ObjectId,
+  status: "active" | "archived",
+  currentVersion: Number,
+  versions: [{
+    version: Number, name: String, description: String,
+    jobRole: String, assessmentId: ObjectId | null,
+    scale: { min: Number, max: Number, labels: Map<String,String> },
+    criteria: [{ key: String, label: String, description: String,
+                 required: Boolean, weight: Number }],
+    changeSummary: String, createdBy: ObjectId, createdAt: Date
+  }],
+  createdBy: ObjectId, updatedBy: ObjectId,
+  archivedBy: ObjectId | null, archivedAt: Date | null,
+  createdAt: Date, updatedAt: Date
+}
+```
+
+Indexes: `{ organizationId: 1, status: 1, updatedAt: -1 }` and
+`{ organizationId: 1, _id: 1 }` (the latter supplements `_id` for scoped queries).
+Versions are append-only through the service: edit requires full replacement rubric
+content plus `expectedVersion`, and atomically pushes the next version only when
+`currentVersion` matches. Archived rubrics cannot be edited, and old versions are
+readable. The model is not a database-enforced append-only collection: access to
+raw MongoDB writes must remain restricted to trusted services.
+
+**Snapshot policy for forthcoming scorecards:** freeze the selected rubric
+version into the interview evaluation context **when the first scorecard is
+created**, not when a rubric is first associated with an interview. Subsequent
+scorecards for that interview must reference the same frozen version and
+preserve their own immutable snapshot. This assignment/snapshot workflow is
+not implemented in Slice 1; it is a binding rule for Slice 3.
+
+**Future scoring policy:** 1–5 by default; numeric weights 0–100; zero weight
+contributes nothing; exclude `not assessed` and unscored optional criteria from
+weighted numerators and denominators; missing scores are never zero; an empty
+eligible denominator produces `not available`, not zero. Weighted mean =
+`sum(score * weight) / sum(eligible weight)`; round only the displayed result
+to two decimals, retaining original per-criterion scores and weights.
+
+### evaluations (future Phase 5 slices — NOT IMPLEMENTED)
 
 ```js
 {

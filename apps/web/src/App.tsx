@@ -12,6 +12,7 @@ import { SystemStatusPage } from "./pages/SystemStatusPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { InterviewRoomPage } from "./features/interview-room/pages/InterviewRoomPage";
 import { CandidateJoinPage } from "./pages/CandidateJoinPage";
+import { RubricsPage } from "./features/rubrics/pages/RubricsPage";
 
 export const App: React.FC = () => {
   return (
@@ -44,6 +45,14 @@ export const App: React.FC = () => {
               element={
                 <ProtectedRoute>
                   <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="rubrics"
+              element={
+                <ProtectedRoute>
+                  <RubricsPage />
                 </ProtectedRoute>
               }
             />
